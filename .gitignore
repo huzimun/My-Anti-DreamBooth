@@ -1,0 +1,10 @@
+__pycache__
+.vscode
+.DS_Store
+data/
+outputs/
+stable-diffusion/
+evaluations/
+*.pt
+*.h5
+test/
