@@ -1,7 +1,8 @@
-export DATASET_DIR="/gemini/code/metacloak_common_9"
-export EXPERIMENT_NAME="metacloak_11"
+export DATASET_DIR="./outputs/adversarial_images/ASPL_test_no_accelerate"
+export EXPERIMENT_NAME="ASPL_test_no_accelerate2"
 export MODEL_PATH="./stable-diffusion/stable-diffusion-v2-1"
 export CLASS_DIR="data/class-person"
+
 
 for person_id in `ls $DATASET_DIR`; do       
     # ------------------------- Train DreamBooth on perturbed examples -------------------------
@@ -23,7 +24,7 @@ for person_id in `ls $DATASET_DIR`; do
       --class_prompt="a photo of person" \
       --inference_prompt="a photo of sks person;a dslr portrait of sks person" \
       --resolution=512 \
-      --train_batch_size=2 \
+      --train_batch_size=1 \
       --gradient_accumulation_steps=1 \
       --learning_rate=5e-7 \
       --lr_scheduler="constant" \
