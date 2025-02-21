@@ -4,7 +4,7 @@ __pycache__
 data/
 outputs/
 stable-diffusion/
-evaluations
 *.pt
 *.h5
+*.bin
 test/
