@@ -1,7 +1,8 @@
 export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
-export EXPERIMENT_NAME="test"
-export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-v1-5"
+export EXPERIMENT_NAME="ASPL_test_no_accelerate2"
+export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-2-1-base"
 export CLASS_DIR="data/class-person"
+export device="cuda:2"
 
 # for person_id in `ls $DATASET_DIR`; do   
 for person_id in "n000050"; do   
@@ -15,7 +16,9 @@ for person_id in "n000050"; do
     mkdir -p $ADV_OUTPUT_DIR
     
     # Generate Protecting Images
-    accelerate launch attacks/aspl.py \
+    # accelerate launch attacks/aspl.py \
+    python3 attacks/aspl.py \
+        --device $device \
         --pretrained_model_name_or_path=$MODEL_PATH  \
         --enable_xformers_memory_efficient_attention \
         --instance_data_dir_for_train=$CLEAN_TRAIN_DIR \
