@@ -7,7 +7,7 @@ export CLASS_DIR="data/class-person"
 for person_id in `ls $DATASET_DIR`; do       
     # ------------------------- Train DreamBooth on perturbed examples -------------------------
     export INSTANCE_DIR=${DATASET_DIR}"/"${person_id}
-    export DREAMBOOTH_OUTPUT_DIR="outputs/"$EXPERIMENT_NAME"/"${person_id}
+    export DREAMBOOTH_OUTPUT_DIR="outputs/customization_outputs/"$EXPERIMENT_NAME"/"${person_id}
     echo ${INSTANCE_DIR}
     echo ${DREAMBOOTH_OUTPUT_DIR}
     
@@ -31,7 +31,7 @@ for person_id in `ls $DATASET_DIR`; do
       --lr_warmup_steps=0 \
       --num_class_images=200 \
       --max_train_steps=1000 \
-      --checkpointing_steps=500 \
+      --checkpointing_steps=1000 \
       --center_crop \
       --mixed_precision=bf16 \
       --prior_generation_precision=bf16 \

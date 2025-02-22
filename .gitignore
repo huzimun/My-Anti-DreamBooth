@@ -8,3 +8,4 @@ stable-diffusion/
 *.h5
 *.bin
 test/
+dreambooth-clean-outputs

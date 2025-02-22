@@ -1,18 +1,17 @@
-export EXPERIMENT_NAME="E-ASPL_no_accelerate_test"
+export EXPERIMENT_NAME="E-ASPL"
 export CLASS_DIR="data/class-person"
-export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
-export CLASS_DIR="data/class-person"
-export device="cuda:1"
+export DATASET_DIR="/home/humw/Datasets/VGGFace2"
+export device="cuda:3"
 
 # ------------------------- Train E-ASPL on set B -------------------------
 # pretrained sd models
-sd14_path="./stable-diffusion/stable-diffusion-v1-4"
-sd15_path="./stable-diffusion/stable-diffusion-v1-5"
-sd21_path="./stable-diffusion/stable-diffusion-2-1-base"
+sd14_path="/home/humw/Pretrains/stable-diffusion-v1-4"
+sd15_path="/home/humw/Pretrains/stable-diffusion-v1-5"
+sd21_path="/home/humw/Pretrains/stable-diffusion-2-1-base"
 ref_model_path="${sd14_path},${sd15_path},${sd21_path}"
 
-# for person_id in `ls $DATASET_DIR`; do   
-for person_id in "n000050"; do   
+for person_id in `ls $DATASET_DIR`; do   
+# for person_id in "n000050"; do   
   export CLEAN_TRAIN_DIR=${DATASET_DIR}"/"${person_id}"/set_A" 
   export CLEAN_ADV_DIR=${DATASET_DIR}"/"${person_id}"/set_B"
   export ADV_OUTPUT_DIR="outputs/adversarial_images/"$EXPERIMENT_NAME"/"${person_id}

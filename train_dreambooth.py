@@ -996,39 +996,18 @@ def main(args):
 
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
-                        # save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+                        save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                         ckpt_pipeline = DiffusionPipeline.from_pretrained(
                             args.pretrained_model_name_or_path,
                             unet=accelerator.unwrap_model(unet),
                             text_encoder=accelerator.unwrap_model(text_encoder),
                             revision=args.revision,
-                            safety_checker=None,
-                            low_cpu_mem_usage=False
-                        ).to("cuda")
-                        # ckpt_pipeline.save_pretrained(save_path)
-                        # del ckpt_pipeline
-                        prompts = args.inference_prompts.split(";")
+                        )
+                        ckpt_pipeline.save_pretrained(save_path)
+                        del unet, text_encoder, ckpt_pipeline
+                        # prompts = args.inference_prompts.split(";")
                         # infer(save_path, prompts, n_img=16, bs=4, n_steps=100)
-                        ckpt_pipeline.enable_xformers_memory_efficient_attention()
-                        ckpt_pipeline.disable_attention_slicing()
-                        n_img = 16
-                        bs = 4
-                        n_steps = 100
-                        guidance_scale = 7.5
-                        for prompt in prompts:
-                            print(prompt)
-                            norm_prompt = prompt.lower().replace(",", "").replace(" ", "_")
-                            out_path = f"{args.output_dir}/{norm_prompt}"
-                            os.makedirs(out_path, exist_ok=True)
-                            for i in range(n_img // bs):
-                                images = ckpt_pipeline(
-                                    [prompt] * bs,
-                                    num_inference_steps=n_steps,
-                                    guidance_scale=guidance_scale,
-                                ).images
-                                for idx, image in enumerate(images):
-                                    image.save(f"{out_path}/{i}_{idx}.png")
-                        logger.info(f"Saved state to {args.output_dir}")
+                        # logger.info(f"Saved state to {save_path}")
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)

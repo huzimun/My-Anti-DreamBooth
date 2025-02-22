@@ -1,8 +1,8 @@
-export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
-export EXPERIMENT_NAME="ASPL_test_no_accelerate2"
-export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-2-1-base"
+export DATASET_DIR="/home/humw/Datasets/VGGFace2"
+export EXPERIMENT_NAME="ASPL_test_no_accelerate_21"
+export MODEL_PATH="/home/humw/Pretrains/stable-diffusion-2-1-base"
 export CLASS_DIR="data/class-person"
-export device="cuda:2"
+export device="cuda:0"
 
 # for person_id in `ls $DATASET_DIR`; do   
 for person_id in "n000050"; do   
