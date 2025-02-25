@@ -1,6 +1,6 @@
-export EXPERIMENT_NAME="E-ASPL"
+export EXPERIMENT_NAME="E-ASPL_mini-CelebA-HQ"
 export CLASS_DIR="data/class-person"
-export DATASET_DIR="/home/humw/Datasets/VGGFace2"
+export DATASET_DIR="/home/humw/Datasets/mini-CelebA-HQ"
 export device="cuda:3"
 
 # ------------------------- Train E-ASPL on set B -------------------------

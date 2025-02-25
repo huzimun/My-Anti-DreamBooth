@@ -11,9 +11,8 @@ sd21_path="./stable-diffusion/stable-diffusion-2-1-base"
 sd_paths=($sd14_path $sd15_path $sd21_path)
 
 # versions=(V14 V15 V21)
-
-for person_id in `ls $DATASET_DIR`; do   
-# for person_id in "n000050"; do 
+# for person_id in `ls $DATASET_DIR`; do   
+for person_id in "n000190" "n000215" "n000217" "n000220" "n000221" "n000223" "n000225" "n000228" "n000234" "n000236" "n000238" "n000243"; do 
   for ((i=0;i<3;i++));
   do
       export CLEAN_TRAIN_DIR=${DATASET_DIR}"/"${person_id}"/set_A" 

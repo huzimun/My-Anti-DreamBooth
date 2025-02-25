@@ -1,6 +1,6 @@
-export DATASET_DIR="./outputs/adversarial_images/ASPL_test_no_accelerate"
-export EXPERIMENT_NAME="ASPL_test_no_accelerate2"
-export MODEL_PATH="./stable-diffusion/stable-diffusion-v2-1"
+export DATASET_DIR="./outputs/adversarial_images/E-ASPL"
+export EXPERIMENT_NAME="E-ASPL"
+export MODEL_PATH="./stable-diffusion/stable-diffusion-v1-5"
 export CLASS_DIR="data/class-person"
 
 
