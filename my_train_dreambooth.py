@@ -1014,7 +1014,7 @@ def main(args):
                         ckpt_pipeline.enable_xformers_memory_efficient_attention()
                         ckpt_pipeline.disable_attention_slicing()
                         n_img = 16
-                        bs = 1
+                        bs = 4
                         n_steps = 100
                         guidance_scale = 7.5
                         for prompt in prompts:

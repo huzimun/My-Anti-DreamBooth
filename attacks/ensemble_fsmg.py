@@ -476,7 +476,7 @@ def main(args):
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
         diffusers.utils.logging.set_verbosity_error()
-    pdb.set_trace()
+    # pdb.set_trace()
     # If passed along, set the training seed now.
     if args.seed is not None:
         set_seed(args.seed)
@@ -527,19 +527,32 @@ def main(args):
         # update
         perturbed_data = en_data
 
-        if (i + 1) % args.checkpointing_steps == 0:
-            save_folder = f"{args.output_dir}/noise-ckpt/{i+1}"
-            os.makedirs(save_folder, exist_ok=True)
-            noised_imgs = perturbed_data.detach()
-            img_names = [
-                str(instance_path).split("/")[-1] for instance_path in list(Path(args.instance_data_dir).iterdir())
-            ]
-            for img_pixel, img_name in zip(noised_imgs, img_names):
-                save_path = os.path.join(save_folder, f"{i+1}_noise_{img_name}")
-                Image.fromarray(
-                    (img_pixel * 127.5 + 128).clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
-                ).save(save_path)
-            print(f"Saved noise at step {i+1} to {save_folder}")
+        # if (i + 1) % args.checkpointing_steps == 0:
+        #     save_folder = f"{args.output_dir}/noise-ckpt/{i+1}"
+        #     os.makedirs(save_folder, exist_ok=True)
+        #     noised_imgs = perturbed_data.detach()
+        #     img_names = [
+        #         str(instance_path).split("/")[-1] for instance_path in list(Path(args.instance_data_dir).iterdir())
+        #     ]
+        #     for img_pixel, img_name in zip(noised_imgs, img_names):
+        #         save_path = os.path.join(save_folder, f"{i+1}_noise_{img_name}")
+        #         Image.fromarray(
+        #             (img_pixel * 127.5 + 128).clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
+        #         ).save(save_path)
+        #     print(f"Saved noise at step {i+1} to {save_folder}")
+    save_folder = args.output_dir
+    os.makedirs(save_folder, exist_ok=True)
+    noised_imgs = perturbed_data.detach()
+    img_names = [
+        str(instance_path).split("/")[-1]
+        for instance_path in list(Path(args.instance_data_dir).iterdir())
+    ]
+    for img_pixel, img_name in zip(noised_imgs, img_names):
+        save_path = os.path.join(save_folder, img_name)
+        Image.fromarray(
+            (img_pixel * 127.5 + 128).clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
+        ).save(save_path)
+    print(f"Saved noise images to {save_folder}")
 
 
 if __name__ == "__main__":

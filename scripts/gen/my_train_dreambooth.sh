@@ -24,7 +24,7 @@ for person_id in `ls $DATASET_DIR`; do
       --class_prompt="a photo of person" \
       --inference_prompt="a photo of sks person;a dslr portrait of sks person" \
       --resolution=512 \
-      --train_batch_size=1 \
+      --train_batch_size=2 \
       --gradient_accumulation_steps=1 \
       --learning_rate=5e-7 \
       --lr_scheduler="constant" \
