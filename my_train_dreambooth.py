@@ -996,9 +996,45 @@ def main(args):
                 global_step += 1
 
                 if global_step % args.checkpointing_steps == 0:
-                    # # 直接制作pipeline，生成图像
+                    # 直接制作pipeline，生成图像
+                    if accelerator.is_main_process:
+                        # save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+                        ckpt_pipeline = DiffusionPipeline.from_pretrained(
+                            args.pretrained_model_name_or_path,
+                            unet=accelerator.unwrap_model(unet),
+                            text_encoder=accelerator.unwrap_model(text_encoder),
+                            revision=args.revision,
+                            safety_checker=None,
+                            low_cpu_mem_usage=False
+                        ).to("cuda")
+                        # ckpt_pipeline.save_pretrained(save_path)
+                        # del ckpt_pipeline
+                        prompts = args.inference_prompts.split(";")
+                        # infer(save_path, prompts, n_img=16, bs=4, n_steps=100)
+                        ckpt_pipeline.enable_xformers_memory_efficient_attention()
+                        ckpt_pipeline.disable_attention_slicing()
+                        n_img = 16
+                        bs = 1
+                        n_steps = 100
+                        guidance_scale = 7.5
+                        for prompt in prompts:
+                            print(prompt)
+                            norm_prompt = prompt.lower().replace(",", "").replace(" ", "_")
+                            out_path = f"{args.output_dir}/{norm_prompt}"
+                            os.makedirs(out_path, exist_ok=True)
+                            for i in range(n_img // bs):
+                                images = ckpt_pipeline(
+                                    [prompt] * bs,
+                                    num_inference_steps=n_steps,
+                                    guidance_scale=guidance_scale,
+                                ).images
+                                for idx, image in enumerate(images):
+                                    image.save(f"{out_path}/{i}_{idx}.png")
+                        logger.info(f"Saved state to {args.output_dir}")
+                    # # 调用infer函数，生成图像
                     # if accelerator.is_main_process:
                     #     # save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+                    #     save_path = args.output_dir # 将图像和权重直接存放在输出路径下
                     #     ckpt_pipeline = DiffusionPipeline.from_pretrained(
                     #         args.pretrained_model_name_or_path,
                     #         unet=accelerator.unwrap_model(unet),
@@ -1006,66 +1042,32 @@ def main(args):
                     #         revision=args.revision,
                     #         safety_checker=None,
                     #         low_cpu_mem_usage=False
-                    #     ).to("cuda")
-                    #     # ckpt_pipeline.save_pretrained(save_path)
-                    #     # del ckpt_pipeline
+                    #     )
+                    #     ckpt_pipeline.save_pretrained(save_path)
+                    #     unet.cpu(); text_encoder.cpu(); 
+                    #     del ckpt_pipeline, unet, text_encoder
                     #     prompts = args.inference_prompts.split(";")
-                    #     # infer(save_path, prompts, n_img=16, bs=4, n_steps=100)
-                    #     ckpt_pipeline.enable_xformers_memory_efficient_attention()
-                    #     ckpt_pipeline.disable_attention_slicing()
-                    #     n_img = 16
-                    #     bs = 4
-                    #     n_steps = 100
-                    #     guidance_scale = 7.5
+                    #     infer(save_path, prompts, n_img=16, bs=4, n_steps=100)
+                    #     logger.info(f"Saved state to {save_path}")
+                    #     # 删除输出路径下除输出图像以外文件
+                    #     image_folders = []
                     #     for prompt in prompts:
-                    #         print(prompt)
                     #         norm_prompt = prompt.lower().replace(",", "").replace(" ", "_")
-                    #         out_path = f"{args.output_dir}/{norm_prompt}"
-                    #         os.makedirs(out_path, exist_ok=True)
-                    #         for i in range(n_img // bs):
-                    #             images = ckpt_pipeline(
-                    #                 [prompt] * bs,
-                    #                 num_inference_steps=n_steps,
-                    #                 guidance_scale=guidance_scale,
-                    #             ).images
-                    #             for idx, image in enumerate(images):
-                    #                 image.save(f"{out_path}/{i}_{idx}.png")
-                    #     logger.info(f"Saved state to {args.output_dir}")
-                    # 调用infer函数，生成图像
-                    if accelerator.is_main_process:
-                        # save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
-                        save_path = args.output_dir # 将图像和权重直接存放在输出路径下
-                        ckpt_pipeline = DiffusionPipeline.from_pretrained(
-                            args.pretrained_model_name_or_path,
-                            unet=accelerator.unwrap_model(unet),
-                            text_encoder=accelerator.unwrap_model(text_encoder),
-                            revision=args.revision,
-                        )
-                        ckpt_pipeline.save_pretrained(save_path)
-                        unet.cpu(); text_encoder.cpu(); 
-                        del ckpt_pipeline, unet, text_encoder
-                        prompts = args.inference_prompts.split(";")
-                        infer(save_path, prompts, n_img=16, bs=4, n_steps=100)
-                        logger.info(f"Saved state to {save_path}")
-                        # 删除输出路径下除输出图像以外文件
-                        image_folders = []
-                        for prompt in prompts:
-                            norm_prompt = prompt.lower().replace(",", "").replace(" ", "_")
-                            image_folders.append(norm_prompt)
-                        for folder in os.listdir(save_path):
-                            if folder not in image_folders:
-                                path = os.path.join(save_path, folder)
-                                if os.path.isfile(path):
-                                    # 如果是文件，使用os.remove删除
-                                    os.remove(path)
-                                    print(f"{path} 已删除（文件）")
-                                elif os.path.isdir(path):
-                                    # 如果是文件夹，使用shutil.rmtree删除
-                                    shutil.rmtree(path)
-                                    print(f"{path} 已删除（文件夹）")
-                                else:
-                                    # 如果路径不存在或不是文件/文件夹，打印错误信息
-                                    print(f"{path} 不存在或不是一个有效的文件/文件夹")
+                    #         image_folders.append(norm_prompt)
+                    #     for folder in os.listdir(save_path):
+                    #         if folder not in image_folders:
+                    #             path = os.path.join(save_path, folder)
+                    #             if os.path.isfile(path):
+                    #                 # 如果是文件，使用os.remove删除
+                    #                 os.remove(path)
+                    #                 print(f"{path} 已删除（文件）")
+                    #             elif os.path.isdir(path):
+                    #                 # 如果是文件夹，使用shutil.rmtree删除
+                    #                 shutil.rmtree(path)
+                    #                 print(f"{path} 已删除（文件夹）")
+                    #             else:
+                    #                 # 如果路径不存在或不是文件/文件夹，打印错误信息
+                    #                 print(f"{path} 不存在或不是一个有效的文件/文件夹")
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)

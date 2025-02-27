@@ -441,6 +441,13 @@ def parse_args(input_args=None):
         help = "vae_model_path"
     )
     parser.add_argument(
+        "--target_image_path",
+        type=str,
+        default="/home/humw/Codes/FaceOff/output/Exp1/ipadapter/min-VGGFace2_ipadapter_out-224_no-mid-size_loss-n-mse_alpha6_eps16_num200_pre-test",
+        required=False,
+        help = "target_image_path dir"
+    )
+    parser.add_argument(
         "--input_dir",
         type=str,
         default="/home/humw/Codes/FaceOff/output/Exp1/ipadapter/min-VGGFace2_ipadapter_out-224_no-mid-size_loss-n-mse_alpha6_eps16_num200_pre-test",
@@ -541,6 +548,26 @@ def main(args):
         args.device, dtype=torch.float16
     )
     # clip_image_processor = CLIPImageProcessor()
+    resample_interpolation = transforms.InterpolationMode.BILINEAR
+    center_crop = True
+    train_aug = [
+        transforms.Resize(size=224, interpolation=resample_interpolation),
+        transforms.CenterCrop(size=224) if center_crop else transforms.RandomCrop(size=224),
+    ]
+    tensorize_and_normalize = [
+        transforms.Normalize([0.5*255]*3,[0.5*255]*3),
+    ]
+    all_trans = train_aug + tensorize_and_normalize
+    all_trans = transforms.Compose(all_trans)
+    print("all_trans:{}".format(all_trans))
+        
+    # 读取target_image
+    
+    target_images = load_data(args.target_image_path, image_size=512, ) # 之所以不用224，是因为要输入vae
+    target_latent_tensor = (
+        vae.encode(target_images).latent_dist.sample().to(dtype=torch_dtype) * vae.config.scaling_factor
+    )
+    
     # image proj model, init_proj()
     image_proj_model = Resampler(
             dim=unet.config.cross_attention_dim,
@@ -609,14 +636,8 @@ def main(args):
         perturbed_images = original_images.detach().clone() # torch.Size([4, 3, 512, 512])
         perturbed_images = perturbed_images.to(args.device, dtype=torch.float16)
         
-        # pil_image = original_images
-        # clip_image_embeds = None
         num_prompts = 1 if isinstance(original_images, Image.Image) else len(original_images)
-        # if original_images is not None:
-        #     num_prompts = 1 if isinstance(original_images, Image.Image) else len(original_images)
-        # else:
-        #     num_prompts = clip_image_embeds.size(0)
-        # import pdb; pdb.set_trace()
+
         if not isinstance(prompt, List):
             prompt = [prompt] * num_prompts
         if not isinstance(negative_prompt, List):
@@ -625,23 +646,6 @@ def main(args):
         # image_prompt_embeds, uncond_image_prompt_embeds = self.get_image_embeds( # torch.Size([1, 16, 768]), torch.Size([1, 16, 768])
         #     pil_image=pil_image, clip_image_embeds=clip_image_embeds
         # )
-        resample_interpolation = transforms.InterpolationMode.BILINEAR
-        center_crop = True
-        train_aug = [
-        transforms.Resize(size=224, interpolation=resample_interpolation),
-        transforms.CenterCrop(size=224) if center_crop else transforms.RandomCrop(size=224),
-        ]
-        tensorize_and_normalize = [
-            transforms.Normalize([0.5*255]*3,[0.5*255]*3),
-        ]
-        all_trans = train_aug + tensorize_and_normalize
-        all_trans = transforms.Compose(all_trans)
-        print("all_trans:{}".format(all_trans))
-        
-        # pdb.set_trace()
-        # if isinstance(pil_image, Image.Image):
-        #     pil_image = [pil_image]
-        # clip_image = clip_image_processor(images=pil_image, return_tensors="pt").pixel_values # torch.Size([4, 3, 224, 224])
 
         # 4. Prepare timesteps
         scheduler = DDIMScheduler(
@@ -714,12 +718,6 @@ def main(args):
             # TODO：最大的麻烦是，torch.cat之后得到的prompt_embeds也是叶子节点，梯度传递在这里就断了
             # prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1) # torch.Size([4, 93, 768]),16+77=93
             prompt_embeds = image_prompt_embeds
-            # negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1) # torch.Size([4, 93, 768])
-            # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-            # expand the latents if we are doing classifier free guidance
-            # latent_model_input = latents # torch.Size([4, 4, 64, 64])
-            # latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents # torch.Size([32, 4, 64, 64])
-            # noises = torch.cat([noises] * 2) if do_classifier_free_guidance else noises # torch.Size([32, 4, 64, 64])
             noises = torch.randn_like(latents)
             latents = scheduler.scale_model_input(latents, t) # torch.Size([32, 4, 64, 64])
             # pdb.set_trace()
@@ -729,11 +727,6 @@ def main(args):
                 t,
                 encoder_hidden_states=prompt_embeds, # torch.Size([32, 93, 768]), 没有negative prompt的时候是torch.Size([16, 93, 768]),num_samples=1的时候是torch.Size([4, 93, 768])
             ).sample
-            # pdb.set_trace()
-            # perform guidance
-            # if do_classifier_free_guidance:
-            #     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-            #     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
             
             # 预测的噪声和真实噪声之间的损失，最大化，加上梯度
             loss = F.mse_loss(noise_pred, noises, reduction="mean")

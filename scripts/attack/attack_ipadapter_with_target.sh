@@ -11,6 +11,7 @@ python ./attacks/attack_ipadapter.py \
     --ip_ckpt "/home/humw/Pretrains/h94/IP-Adapter/models/ip-adapter-plus_sd15.bin" \
     --vae_model_path "/home/humw/Pretrains/sd-vae-ft-mse" \
     --device $device \
+    --target_image_path "/home/humw/Codes/FaceOff/target_images/yingbu" \
     --input_dir "/home/humw/Codes/My-Anti-DreamBooth/data/test" \
     --output_dir "./outputs/adversarial_images/${experiment_name}" \
     --resolution 512 \
