@@ -22,14 +22,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
-import random
-import numpy as np
 
-seed = 1
-random.seed(seed) # python的随机种子一样
-np.random.seed(seed) # numpy的随机种子一样
-torch.manual_seed(seed) # 为cpu设置随机种子
-torch.cuda.manual_seed_all(seed) # 为所有的gpu设置随机种子
 
 logger = get_logger(__name__)
 
@@ -172,6 +165,13 @@ def load_model(args, model_path):
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        required=True,
+        help="device id",
+    )
     parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
@@ -461,7 +461,7 @@ def train_one_epoch(
     )
 
     weight_dtype = torch.bfloat16
-    device = torch.device("cuda")
+    device = torch.device(args.device)
 
     vae.to(device, dtype=weight_dtype)
     text_encoder.to(device, dtype=weight_dtype)
@@ -484,7 +484,7 @@ def train_one_epoch(
         noise = torch.randn_like(latents)
         bsz = latents.shape[0]
         # Sample a random timestep for each image
-        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=device)
+        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=args.device)
         timesteps = timesteps.long()
 
         # Add noise to the latents according to the noise magnitude at each timestep
@@ -547,7 +547,7 @@ def pgd_attack(
 
     unet, text_encoder = models
     weight_dtype = torch.bfloat16
-    device = torch.device("cuda")
+    device = torch.device(args.device)
 
     vae.to(device, dtype=weight_dtype)
     text_encoder.to(device, dtype=weight_dtype)
@@ -573,7 +573,7 @@ def pgd_attack(
         noise = torch.randn_like(latents)
         bsz = latents.shape[0]
         # Sample a random timestep for each image
-        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=device)
+        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=args.device)
         timesteps = timesteps.long()
         # Add noise to the latents according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
@@ -612,27 +612,29 @@ def pgd_attack(
 def main(args):
     logging_dir = Path(args.output_dir, args.logging_dir)
 
-    accelerator = Accelerator(
-        mixed_precision=args.mixed_precision,
-        log_with=args.report_to,
-        logging_dir=logging_dir,
-    )
+    # accelerator = Accelerator(
+    #     mixed_precision=args.mixed_precision,
+    #     log_with=args.report_to,
+    #     logging_dir=logging_dir,
+    # )
 
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    logger.info(accelerator.state, main_process_only=False)
-    if accelerator.is_local_main_process:
-        datasets.utils.logging.set_verbosity_warning()
-        transformers.utils.logging.set_verbosity_warning()
-        diffusers.utils.logging.set_verbosity_info()
-    else:
-        datasets.utils.logging.set_verbosity_error()
-        transformers.utils.logging.set_verbosity_error()
-        diffusers.utils.logging.set_verbosity_error()
-
+    # logger.info(accelerator.state, main_process_only=False)
+    # if accelerator.is_local_main_process:
+    #     datasets.utils.logging.set_verbosity_warning()
+    #     transformers.utils.logging.set_verbosity_warning()
+    #     diffusers.utils.logging.set_verbosity_info()
+    # else:
+    #     datasets.utils.logging.set_verbosity_error()
+    #     transformers.utils.logging.set_verbosity_error()
+    #     diffusers.utils.logging.set_verbosity_error()
+    datasets.utils.logging.set_verbosity_error()
+    transformers.utils.logging.set_verbosity_error()
+    diffusers.utils.logging.set_verbosity_error()
     if args.seed is not None:
         set_seed(args.seed)
 
@@ -644,7 +646,7 @@ def main(args):
         cur_class_images = len(list(class_images_dir.iterdir()))
 
         if cur_class_images < args.num_class_images:
-            torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
+            # torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
             if args.mixed_precision == "fp32":
                 torch_dtype = torch.float32
             elif args.mixed_precision == "fp16":
@@ -665,13 +667,15 @@ def main(args):
             sample_dataset = PromptDataset(args.class_prompt, num_new_images)
             sample_dataloader = torch.utils.data.DataLoader(sample_dataset, batch_size=args.sample_batch_size)
 
-            sample_dataloader = accelerator.prepare(sample_dataloader)
-            pipeline.to(accelerator.device)
+            # sample_dataloader = accelerator.prepare(sample_dataloader)
+            # pipeline.to(accelerator.device)
+            pipeline.to(args.device)
 
             for example in tqdm(
                 sample_dataloader,
                 desc="Generating class images",
-                disable=not accelerator.is_local_main_process,
+                # disable=not accelerator.is_local_main_process,
+                disable=True,
             ):
                 images = pipeline(example["prompt"]).images
 

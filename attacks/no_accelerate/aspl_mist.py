@@ -24,16 +24,10 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
 import time
+from utils import LatentAttack
 
 logger = get_logger(__name__)
 
-import random
-
-seed = 1
-random.seed(seed) # python的随机种子一样
-np.random.seed(seed) # numpy的随机种子一样
-torch.manual_seed(seed) # 为cpu设置随机种子
-torch.cuda.manual_seed_all(seed) # 为所有的gpu设置随机种子
 
 class DreamBoothDatasetFromTensor(Dataset):
     """Just like DreamBoothDataset, but take instance_images_tensor instead of path"""
@@ -129,6 +123,20 @@ def import_model_class_from_model_name_or_path(pretrained_model_name_or_path: st
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="ace",
+        required=True,
+        help="ace or ace-plus",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        required=True,
+        help="device id",
+    )
     parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
@@ -335,7 +343,6 @@ def parse_args(input_args=None):
     )
     parser.add_argument(
         "--target_image_path",
-        type=str,
         default=None,
         help="target image for attacking",
     )
@@ -413,11 +420,11 @@ def train_one_epoch(
     )
 
     weight_dtype = torch.bfloat16
-    device = torch.device("cuda")
+    device = torch.device(args.device)
 
-    vae.to(device, dtype=weight_dtype)
-    text_encoder.to(device, dtype=weight_dtype)
-    unet.to(device, dtype=weight_dtype)
+    vae.to(args.device, dtype=weight_dtype)
+    text_encoder.to(args.device, dtype=weight_dtype)
+    unet.to(args.device, dtype=weight_dtype)
 
     for step in range(num_steps):
         unet.train()
@@ -425,9 +432,9 @@ def train_one_epoch(
 
         step_data = train_dataset[step % len(train_dataset)]
         pixel_values = torch.stack([step_data["instance_images"], step_data["class_images"]]).to(
-            device, dtype=weight_dtype
+            args.device, dtype=weight_dtype
         )
-        input_ids = torch.cat([step_data["instance_prompt_ids"], step_data["class_prompt_ids"]], dim=0).to(device)
+        input_ids = torch.cat([step_data["instance_prompt_ids"], step_data["class_prompt_ids"]], dim=0).to(args.device)
 
         latents = vae.encode(pixel_values).latent_dist.sample()
         latents = latents * vae.config.scaling_factor
@@ -436,7 +443,8 @@ def train_one_epoch(
         noise = torch.randn_like(latents)
         bsz = latents.shape[0]
         # Sample a random timestep for each image
-        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+        # timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=args.device)
         timesteps = timesteps.long()
 
         # Add noise to the latents according to the noise magnitude at each timestep
@@ -500,11 +508,11 @@ def pgd_attack(
 
     unet, text_encoder = models
     weight_dtype = torch.bfloat16
-    device = torch.device("cuda")
+    device = torch.device(args.device)
 
-    vae.to(device, dtype=weight_dtype)
-    text_encoder.to(device, dtype=weight_dtype)
-    unet.to(device, dtype=weight_dtype)
+    vae.to(args.device, dtype=weight_dtype)
+    text_encoder.to(args.device, dtype=weight_dtype)
+    unet.to(args.device, dtype=weight_dtype)
 
     perturbed_images = data_tensor.detach().clone()
     perturbed_images.requires_grad_(True)
@@ -519,21 +527,22 @@ def pgd_attack(
 
     for step in range(num_steps): # 6
         perturbed_images.requires_grad = True
-        latents = vae.encode(perturbed_images.to(device, dtype=weight_dtype)).latent_dist.sample()
+        latents = vae.encode(perturbed_images.to(args.device, dtype=weight_dtype)).latent_dist.sample()
         latents = latents * vae.config.scaling_factor # torch.Size([4, 4, 64, 64])
 
         # Sample noise that we'll add to the latents
         noise = torch.randn_like(latents)
         bsz = latents.shape[0] # 4
         # Sample a random timestep for each image
-        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+        # timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=args.device)
         timesteps = timesteps.long()
         # Add noise to the latents according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps) # torch.Size([4, 4, 64, 64])
 
         # Get the text embedding for conditioning
-        encoder_hidden_states = text_encoder(input_ids.to(device))[0] # torch.Size([4, 77, 768])
+        encoder_hidden_states = text_encoder(input_ids.to(args.device))[0] # torch.Size([4, 77, 768])
 
         # Predict the noise residual
         model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample # torch.Size([4, 4, 64, 64])
@@ -552,18 +561,27 @@ def pgd_attack(
 
         # target-shift loss
         if target_tensor is not None:
-            xtm1_pred = torch.cat(
-                [
-                    noise_scheduler.step(
-                        model_pred[idx : idx + 1],
-                        timesteps[idx : idx + 1],
-                        noisy_latents[idx : idx + 1],
-                    ).prev_sample
-                    for idx in range(len(model_pred))
-                ]
-            )
-            xtm1_target = noise_scheduler.add_noise(target_tensor, noise, timesteps - 1)
-            loss = loss - F.mse_loss(xtm1_pred, xtm1_target)
+            if args.mode == 'ace':
+                    loss = - F.mse_loss(model_pred, target_tensor)
+                    # fused mode
+                    if args.mode == 'ace-plus':
+                        loss = -torch.sum(model_pred.float() * target.float())
+                        
+                        latent_attack = LatentAttack()
+                        loss = loss - 1e2 * latent_attack(latents, target_tensor=target_tensor)   
+            else:         
+                xtm1_pred = torch.cat(
+                    [
+                        noise_scheduler.step(
+                            model_pred[idx : idx + 1],
+                            timesteps[idx : idx + 1],
+                            noisy_latents[idx : idx + 1],
+                        ).prev_sample
+                        for idx in range(len(model_pred))
+                    ]
+                )
+                xtm1_target = noise_scheduler.add_noise(target_tensor, noise, timesteps - 1)
+                loss = loss - F.mse_loss(xtm1_pred, xtm1_target)
 
         loss.backward()
 
@@ -580,26 +598,29 @@ def pgd_attack(
 def main(args):
     logging_dir = Path(args.output_dir, args.logging_dir)
 
-    accelerator = Accelerator(
-        mixed_precision=args.mixed_precision,
-        log_with=args.report_to,
-        logging_dir=logging_dir,
-    )
+    # accelerator = Accelerator(
+    #     mixed_precision=args.mixed_precision,
+    #     log_with=args.report_to,
+    #     logging_dir=logging_dir,
+    # )
 
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    logger.info(accelerator.state, main_process_only=False)
-    if accelerator.is_local_main_process:
-        datasets.utils.logging.set_verbosity_warning()
-        transformers.utils.logging.set_verbosity_warning()
-        diffusers.utils.logging.set_verbosity_info()
-    else:
-        datasets.utils.logging.set_verbosity_error()
-        transformers.utils.logging.set_verbosity_error()
-        diffusers.utils.logging.set_verbosity_error()
+    # logger.info(accelerator.state, main_process_only=False)
+    # if accelerator.is_local_main_process:
+    #     datasets.utils.logging.set_verbosity_warning()
+    #     transformers.utils.logging.set_verbosity_warning()
+    #     diffusers.utils.logging.set_verbosity_info()
+    # else:
+    #     datasets.utils.logging.set_verbosity_error()
+    #     transformers.utils.logging.set_verbosity_error()
+    #     diffusers.utils.logging.set_verbosity_error()
+    datasets.utils.logging.set_verbosity_error()
+    transformers.utils.logging.set_verbosity_error()
+    diffusers.utils.logging.set_verbosity_error()
 
     if args.seed is not None:
         set_seed(args.seed)
@@ -612,7 +633,7 @@ def main(args):
         cur_class_images = len(list(class_images_dir.iterdir()))
 
         if cur_class_images < args.num_class_images:
-            torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
+            # torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
             if args.mixed_precision == "fp32":
                 torch_dtype = torch.float32
             elif args.mixed_precision == "fp16":
@@ -633,13 +654,15 @@ def main(args):
             sample_dataset = PromptDataset(args.class_prompt, num_new_images)
             sample_dataloader = torch.utils.data.DataLoader(sample_dataset, batch_size=args.sample_batch_size)
 
-            sample_dataloader = accelerator.prepare(sample_dataloader)
-            pipeline.to(accelerator.device)
+            # sample_dataloader = accelerator.prepare(sample_dataloader)
+            # pipeline.to(accelerator.device)
+            pipeline.to(args.device)
 
             for example in tqdm(
                 sample_dataloader,
                 desc="Generating class images",
-                disable=not accelerator.is_local_main_process,
+                # disable=not accelerator.is_local_main_process,
+                disable=True,
             ):
                 images = pipeline(example["prompt"]).images
 
@@ -709,20 +732,19 @@ def main(args):
             raise ValueError("xformers is not available. Make sure it is installed correctly")
 
     target_latent_tensor = None
-    if args.target_image_path is not None and args.target_image_path != "":
+    if args.target_image_path is not None:
         target_image_path = Path(args.target_image_path)
         assert target_image_path.is_file(), f"Target image path {target_image_path} does not exist"
 
         target_image = Image.open(target_image_path).convert("RGB").resize((args.resolution, args.resolution))
         target_image = np.array(target_image)[None].transpose(0, 3, 1, 2)
 
-        target_image_tensor = torch.from_numpy(target_image).to("cuda", dtype=torch.float32) / 127.5 - 1.0
+        target_image_tensor = torch.from_numpy(target_image).to(args.device, dtype=torch.float32) / 127.5 - 1.0
         target_latent_tensor = (
             vae.encode(target_image_tensor).latent_dist.sample().to(dtype=torch.bfloat16) * vae.config.scaling_factor
         )
-        target_latent_tensor = target_latent_tensor.repeat(len(perturbed_data), 1, 1, 1).cuda()
-        target_image_tensor = target_image_tensor.to('cpu')
-        del target_image_tensor
+        # target_latent_tensor = target_latent_tensor.repeat(len(perturbed_data), 1, 1, 1).cuda()
+        target_latent_tensor = target_latent_tensor.repeat(len(perturbed_data), 1, 1, 1).to(args.device)
 
     f = [unet, text_encoder]
     for i in range(args.max_train_steps):

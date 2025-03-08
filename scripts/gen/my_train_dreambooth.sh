@@ -1,10 +1,14 @@
-export DATASET_DIR="./outputs/adversarial_images/Clean_test2"
-export EXPERIMENT_NAME="Clean_test2_sd1-4_bs1_not_save_checkpoint_infer-bs1"
-export MODEL_PATH="./stable-diffusion/stable-diffusion-v1-4"
+export EXPERIMENT_NAME="ASPL_ace-plus-ipadapter_VGGFace2_SD15_unet-ipadapter_yingbu_no-agm-w1-1-w2-0-w3-1-w4-0_cosine_eot-1_sds-0_unT-unet-0_fix-unet-0_fix-noise-0"
+export DATASET_DIR="./outputs/adversarial_images/"$EXPERIMENT_NAME
+export MODEL_PATH="./stable-diffusion/stable-diffusion-v1-5"
 export CLASS_DIR="data/class-person"
 
+export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
+mkdir $save_config_dir
+cp "./scripts/gen/my_train_dreambooth.sh" $save_config_dir
 
-for person_id in `ls $DATASET_DIR`; do       
+for person_id in `ls $DATASET_DIR`
+do       
     # ------------------------- Train DreamBooth on perturbed examples -------------------------
     export INSTANCE_DIR=${DATASET_DIR}"/"${person_id}
     export DREAMBOOTH_OUTPUT_DIR="outputs/customization_outputs/"$EXPERIMENT_NAME"/"${person_id}
@@ -36,4 +40,5 @@ for person_id in `ls $DATASET_DIR`; do
       --mixed_precision=bf16 \
       --prior_generation_precision=bf16 \
       --sample_batch_size=8
+
 done 

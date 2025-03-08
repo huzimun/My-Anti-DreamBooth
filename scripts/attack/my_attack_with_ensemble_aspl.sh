@@ -1,17 +1,16 @@
-export EXPERIMENT_NAME="E-ASPL_mini-CelebA-HQ"
+export EXPERIMENT_NAME="E-ASPL_VGGFace2"
 export CLASS_DIR="data/class-person"
-export DATASET_DIR="/home/humw/Datasets/mini-CelebA-HQ"
-export device="cuda:3"
+export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
 
 # ------------------------- Train E-ASPL on set B -------------------------
 # pretrained sd models
-sd14_path="/home/humw/Pretrains/stable-diffusion-v1-4"
-sd15_path="/home/humw/Pretrains/stable-diffusion-v1-5"
-sd21_path="/home/humw/Pretrains/stable-diffusion-2-1-base"
+sd14_path="/data1/humw/Pretrains/stable-diffusion-v1-4"
+sd15_path="/data1/humw/Pretrains/stable-diffusion-v1-5"
+sd21_path="/data1/humw/Pretrains/stable-diffusion-2-1-base"
 ref_model_path="${sd14_path},${sd15_path},${sd21_path}"
 
-for person_id in `ls $DATASET_DIR`; do   
-# for person_id in "n000050"; do   
+for person_id in "n000238" "n000243"; do
+# for person_id in `ls $DATASET_DIR`; do    
   export CLEAN_TRAIN_DIR=${DATASET_DIR}"/"${person_id}"/set_A" 
   export CLEAN_ADV_DIR=${DATASET_DIR}"/"${person_id}"/set_B"
   export ADV_OUTPUT_DIR="outputs/adversarial_images/"$EXPERIMENT_NAME"/"${person_id}
@@ -20,9 +19,8 @@ for person_id in `ls $DATASET_DIR`; do
   echo ${ADV_OUTPUT_DIR}
   mkdir -p $ADV_OUTPUT_DIR
 
-  # accelerate launch attacks/ensemble_aspl.py \
-  python3 attacks/ensemble_aspl.py \
-    --device $device \
+  accelerate launch attacks/ensemble_aspl.py \
+    --seed=1 \
     --pretrained_model_name_or_path=${ref_model_path} \
     --enable_xformers_memory_efficient_attention \
     --instance_data_dir_for_train=$CLEAN_TRAIN_DIR \
@@ -45,4 +43,50 @@ for person_id in `ls $DATASET_DIR`; do
     --learning_rate=5e-7 \
     --pgd_alpha=5e-3 \
     --pgd_eps=0.12549019607843137
+    
 done
+
+export EXPERIMENT_NAME="E-ASPL_VGGFace2"
+export DATASET_DIR="./outputs/adversarial_images/"$EXPERIMENT_NAME
+export MODEL_PATH="./stable-diffusion/stable-diffusion-v1-5"
+export CLASS_DIR="data/class-person"
+
+export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
+mkdir $save_config_dir
+cp "./scripts/gen/my_attack_with_ensemble_aspl.sh" $save_config_dir
+
+for person_id in `ls $DATASET_DIR`
+do       
+    # ------------------------- Train DreamBooth on perturbed examples -------------------------
+    export INSTANCE_DIR=${DATASET_DIR}"/"${person_id}
+    export DREAMBOOTH_OUTPUT_DIR="outputs/customization_outputs/"$EXPERIMENT_NAME"/"${person_id}
+    echo ${INSTANCE_DIR}
+    echo ${DREAMBOOTH_OUTPUT_DIR}
+    
+    accelerate launch my_train_dreambooth.py \
+      --pretrained_model_name_or_path=$MODEL_PATH  \
+      --enable_xformers_memory_efficient_attention \
+      --train_text_encoder \
+      --instance_data_dir=$INSTANCE_DIR \
+      --class_data_dir=$CLASS_DIR \
+      --output_dir=$DREAMBOOTH_OUTPUT_DIR \
+      --with_prior_preservation \
+      --prior_loss_weight=1.0 \
+      --instance_prompt="a photo of sks person" \
+      --class_prompt="a photo of person" \
+      --inference_prompt="a photo of sks person;a dslr portrait of sks person" \
+      --resolution=512 \
+      --train_batch_size=2 \
+      --gradient_accumulation_steps=1 \
+      --learning_rate=5e-7 \
+      --lr_scheduler="constant" \
+      --lr_warmup_steps=0 \
+      --num_class_images=200 \
+      --max_train_steps=1000 \
+      --checkpointing_steps=1000 \
+      --center_crop \
+      --mixed_precision=bf16 \
+      --prior_generation_precision=bf16 \
+      --sample_batch_size=8
+
+done 

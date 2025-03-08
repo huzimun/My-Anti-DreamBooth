@@ -48,7 +48,13 @@ import time
 check_min_version("0.13.0.dev0")
 
 logger = get_logger(__name__)
-
+import random
+import numpy as np
+# seed = 1
+# random.seed(seed) # python的随机种子一样
+# np.random.seed(seed) # numpy的随机种子一样
+# torch.manual_seed(seed) # 为cpu设置随机种子
+# torch.cuda.manual_seed_all(seed) # 为所有的gpu设置随机种子
 
 def import_model_class_from_model_name_or_path(pretrained_model_name_or_path: str, revision: str):
     text_encoder_config = PretrainedConfig.from_pretrained(
