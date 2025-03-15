@@ -1,6 +1,8 @@
 export EXPERIMENT_NAME="ASPL"
+
 export MODE="ace"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${MODE}
+
 export DATASET="VGGFace2"
 if [ "$DATASET" = "VGGFace2" ]; then
     export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
@@ -9,6 +11,7 @@ else
     echo "Invalid DATASET"
     exit 1
 fi
+
 export MODEL="SD15"
 if [ "$MODEL" = "SD21" ]; then
     export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-2-1-base"
@@ -23,10 +26,14 @@ else
     echo "Invalid MODEL"
     exit 1
 fi
+
 export CLASS_DIR="data/class-person"
-export target="mist"
+export target="yingbu" # mist or yingbu
 if [ "$target" = "mist" ]; then
     export target_image_path="/data1/humw/Codes/mist-v2/data/MIST.png"
+    EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${target}
+elif [ "$target" = "yingbu" ]; then
+    export target_image_path="/data1/humw/Codes/My-Anti-DreamBooth/data/target_images/masks/yingbu.png"
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${target}
 else
     export target_image_path=""

@@ -1,4 +1,4 @@
-export adversarial_folder_name="DisDiff_VGGFace2_SD15"
+export adversarial_folder_name="SimAC_SD15_VGGFace2"
 echo $adversarial_folder_name
 export device="cuda:0"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
@@ -15,7 +15,7 @@ cp "./scripts/eval/eval_dreambooth_new_FaceOff.sh" $save_config_dir
 
 # IMS: protected output and original input
 # ArcFace
-python ./evaluations/ism_fdfr.py \
+python3 ./evaluations/ism_fdfr.py \
     --prompts $prompts \
     --data_dir $customization_output_dir \
     --emb_dirs $VGGFace2 \
@@ -30,7 +30,7 @@ python ./evaluations/ism_fdfr.py \
     --out_out 0
 
 # VGG-Face
-python ./evaluations/ism_fdfr.py \
+python3 ./evaluations/ism_fdfr.py \
     --prompts $prompts \
     --data_dir $customization_output_dir \
     --emb_dirs $VGGFace2 \
@@ -45,7 +45,7 @@ python ./evaluations/ism_fdfr.py \
     --out_out 0
 
 # CLIP
-python ./evaluations/my_clip/my_clip.py \
+python3 ./evaluations/my_clip/my_clip.py \
     --prompts $prompts \
     --data_dir $customization_output_dir \
     --emb_dirs $VGGFace2 \
@@ -62,7 +62,7 @@ python ./evaluations/my_clip/my_clip.py \
 
 # IQA: protected output and original input
 # FID (LIQE, BRISQUE没测）
-python ./evaluations/pyiqa/iqa_metric_for_output.py \
+python3 ./evaluations/pyiqa/iqa_metric_for_output.py \
     --data_dir $customization_output_dir \
     --emb_dir $VGGFace2 \
     --prompts $prompts \
@@ -73,7 +73,7 @@ python ./evaluations/pyiqa/iqa_metric_for_output.py \
 
 # # protected_input and original_input: FID, LPIPS, SSIM, PSNR
 # # protected_input: LIQE, BRISQUE
-# python ./evaluations/pyiqa/iqa_metric.py \
+# python3 ./evaluations/pyiqa/iqa_metric.py \
 #     --data_dir $adversarial_input_dir \
 #     --emb_dirs $VGGFace2 \
 #     --save_dir $evaluation_output_dir \

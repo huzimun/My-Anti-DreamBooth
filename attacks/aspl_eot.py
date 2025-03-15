@@ -24,11 +24,26 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
 import time
+import pdb
 
 logger = get_logger(__name__)
 
 import random
 
+def save_image(save_dir, input_dir, perturbed_data):
+    os.makedirs(save_dir, exist_ok=True)
+    noised_imgs = perturbed_data.detach()
+    img_names = [
+        str(instance_path).split("/")[-1]
+        for instance_path in list(Path(input_dir).iterdir())
+    ]
+    for img_pixel, img_name in zip(noised_imgs, img_names):
+        save_path = os.path.join(save_dir, img_name)
+        Image.fromarray(
+            img_pixel.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
+        ).save(save_path)
+    print("save images to {}".format(save_dir))
+    
 class DreamBoothDatasetFromTensor(Dataset):
     """Just like DreamBoothDataset, but take instance_images_tensor instead of path"""
 
@@ -123,6 +138,13 @@ def import_model_class_from_model_name_or_path(pretrained_model_name_or_path: st
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
+    parser.add_argument(
+        "--eot",
+        type=int,
+        default=0,
+        required=True,
+        help="1 use eot, 0 not use eot",
+    )
     parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
@@ -359,20 +381,35 @@ class PromptDataset(Dataset):
         return example
 
 
-def load_data(data_dir, size=512, center_crop=True) -> torch.Tensor:
-    image_transforms = transforms.Compose(
-        [
-            transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
-        ]
-    )
+def load_data(args, data_dir="", size=512, center_crop=True) -> torch.Tensor:
+    if args.eot == 0: # 不用eot，加载数据的时候就进行数据变换
+        image_transforms = transforms.Compose(
+            [
+                transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ]
+        )
 
-    images = [image_transforms(Image.open(i).convert("RGB")) for i in list(Path(data_dir).iterdir())]
-    images = torch.stack(images)
+        images = [image_transforms(Image.open(i).convert("RGB")) for i in list(Path(data_dir).iterdir())]
+        images = torch.stack(images)
+    else: # 使用eot，这里加载数据的时候就不进行数据变换
+        def image_to_numpy(image):
+            return np.array(image).astype(np.uint8)
+        # more robust loading to avoid loaing non-image files
+        images = [] 
+        for i in list(Path(data_dir).iterdir()):
+            if not i.suffix in [".jpg", ".png", ".jpeg"]:
+                continue
+            else:
+                images.append(image_to_numpy(Image.open(i).convert("RGB")))
+        images = [Image.fromarray(i).resize((size, size), 2) for i in images]
+        images = np.stack(images)
+        # from B x H x W x C to B x C x H x W
+        images = torch.from_numpy(images).permute(0, 3, 1, 2).float()
+        assert images.shape[-1] == images.shape[-2]
     return images
-
 
 def train_one_epoch(
     args,
@@ -489,6 +526,7 @@ def pgd_attack(
     original_images: torch.Tensor,
     target_tensor: torch.Tensor,
     num_steps: int,
+    trans_512
 ):
     """Return new perturbed data"""
 
@@ -501,7 +539,7 @@ def pgd_attack(
     unet.to(device, dtype=weight_dtype)
 
     perturbed_images = data_tensor.detach().clone()
-    perturbed_images.requires_grad_(True)
+    # perturbed_images.requires_grad_(True)
     # import pdb; pdb.set_trace()
     input_ids = tokenizer( # torch.Size([4, 77])
         args.instance_prompt,
@@ -513,7 +551,11 @@ def pgd_attack(
 
     for step in range(num_steps): # 6
         perturbed_images.requires_grad = True
-        latents = vae.encode(perturbed_images.to(device, dtype=weight_dtype)).latent_dist.sample()
+        if trans_512 is not None: # 使用eot
+            tran_perturbed_images = trans_512(perturbed_images)
+            latents = vae.encode(tran_perturbed_images.to(device, dtype=weight_dtype)).latent_dist.sample()
+        else:
+            latents = vae.encode(perturbed_images.to(device, dtype=weight_dtype)).latent_dist.sample()
         latents = latents * vae.config.scaling_factor # torch.Size([4, 4, 64, 64])
 
         # Sample noise that we'll add to the latents
@@ -566,7 +608,7 @@ def pgd_attack(
 
         adv_images = perturbed_images + alpha * perturbed_images.grad.sign()
         eta = torch.clamp(adv_images - original_images, min=-eps, max=+eps)
-        perturbed_images = torch.clamp(original_images + eta, min=-1, max=+1).detach_()
+        perturbed_images = torch.clamp(original_images + eta, min=torch.min(original_images), max=torch.max(original_images)).detach_()
         print(f"PGD loss - step {step}, loss: {loss.detach().item()}")
     return perturbed_images
 
@@ -684,15 +726,18 @@ def main(args):
         torch.backends.cuda.matmul.allow_tf32 = True
 
     clean_data = load_data(
-        args.instance_data_dir_for_train,
+        args,
+        data_dir=args.instance_data_dir_for_train,
         size=args.resolution,
         center_crop=args.center_crop,
     )
     perturbed_data = load_data(
-        args.instance_data_dir_for_adversarial,
+        args,
+        data_dir=args.instance_data_dir_for_adversarial,
         size=args.resolution,
         center_crop=args.center_crop,
     )
+    
     original_data = perturbed_data.clone()
     original_data.requires_grad_(False)
 
@@ -717,7 +762,27 @@ def main(args):
         target_latent_tensor = target_latent_tensor.repeat(len(perturbed_data), 1, 1, 1).cuda()
         target_image_tensor = target_image_tensor.to('cpu')
         del target_image_tensor
+        
+    if args.eot == 1:
+        print("USE EOT")
+        resample_interpolation = transforms.InterpolationMode.BILINEAR
+        train_aug_512 = [
+            transforms.Resize(512, interpolation=resample_interpolation),
+            transforms.CenterCrop(512) if args.center_crop else transforms.RandomCrop(512),
+        ]
 
+        tensorize_and_normalize = [
+            transforms.Normalize([0.5*255]*3,[0.5*255]*3),
+        ]
+        trans_512 = train_aug_512 + tensorize_and_normalize
+        trans_512 = transforms.Compose(trans_512)
+        print("all_trans:{}".format(trans_512))
+        
+        args.pgd_eps = 16.0
+        args.pgd_alpha = 16/10 # 默认是阈值的1/10
+    else:
+        trans_512 = None
+    pdb.set_trace()
     f = [unet, text_encoder]
     for i in range(args.max_train_steps):
         # 1. f' = f.clone()
@@ -741,6 +806,7 @@ def main(args):
             original_data,
             target_latent_tensor,
             args.max_adv_train_steps,
+            trans_512
         )
         f = train_one_epoch(
             args,
@@ -751,21 +817,7 @@ def main(args):
             perturbed_data,
             args.max_f_train_steps,
         )
-
-        # if (i + 1) % args.checkpointing_iterations == 0:
-        #     save_folder = f"{args.output_dir}/noise-ckpt/{i+1}"
-        #     os.makedirs(save_folder, exist_ok=True)
-        #     noised_imgs = perturbed_data.detach()
-        #     img_names = [
-        #         str(instance_path).split("/")[-1]
-        #         for instance_path in list(Path(args.instance_data_dir_for_adversarial).iterdir())
-        #     ]
-        #     for img_pixel, img_name in zip(noised_imgs, img_names):
-        #         save_path = os.path.join(save_folder, f"{i+1}_noise_{img_name}")
-        #         Image.fromarray(
-        #             (img_pixel * 127.5 + 128).clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
-        #         ).save(save_path)
-        #     print(f"Saved noise at step {i+1} to {save_folder}")
+    # pdb.set_trace()
     save_folder = args.output_dir
     os.makedirs(save_folder, exist_ok=True)
     noised_imgs = perturbed_data.detach()
@@ -773,21 +825,17 @@ def main(args):
         str(instance_path).split("/")[-1]
         for instance_path in list(Path(args.instance_data_dir_for_adversarial).iterdir())
     ]
-    for img_pixel, img_name in zip(noised_imgs, img_names):
-        save_path = os.path.join(save_folder, img_name)
-        Image.fromarray(
-            (img_pixel * 127.5 + 128).clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
-        ).save(save_path)
+    if args.eot == 0:
+        for img_pixel, img_name in zip(noised_imgs, img_names):
+            save_path = os.path.join(save_folder, img_name)
+            Image.fromarray(
+                (img_pixel * 127.5 + 128).clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
+            ).save(save_path)
+    else:
+        save_image(save_folder, args.instance_data_dir_for_adversarial, noised_imgs)
     print(f"Saved noise images to {save_folder}")
 
 
 if __name__ == "__main__":
     args = parse_args()
     main(args)
-    # args = parse_args()
-    # t1 = time.time()
-    # main(args)
-    # t2 = time.time()
-    # print('TIME COST: %.6f'%(t2-t1))
-    # with open(file="time_costs.txt", mode='a') as f:
-    #     f.write(str(t2-t1) + '\n')

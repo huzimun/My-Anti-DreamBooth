@@ -1,4 +1,4 @@
-export EXPERIMENT_NAME="ASPL_ace-plus-ipadapter_VGGFace2_SD15_unet-ipadapter_yingbu_no-agm-w1-1-w2-0-w3-1-w4-0_cosine_eot-1_sds-0_unT-unet-0_fix-unet-0_fix-noise-0"
+export EXPERIMENT_NAME="ASPL_SD15_VGGFace2_test_seed-1"
 export DATASET_DIR="./outputs/adversarial_images/"$EXPERIMENT_NAME
 export MODEL_PATH="./stable-diffusion/stable-diffusion-v1-5"
 export CLASS_DIR="data/class-person"
@@ -16,6 +16,7 @@ do
     echo ${DREAMBOOTH_OUTPUT_DIR}
     
     accelerate launch my_train_dreambooth.py \
+      --seed 1 \
       --pretrained_model_name_or_path=$MODEL_PATH  \
       --enable_xformers_memory_efficient_attention \
       --train_text_encoder \

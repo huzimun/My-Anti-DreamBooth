@@ -1,11 +1,11 @@
 export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
-export EXPERIMENT_NAME="ASPL_SD15_VGGFace2_test_seed-1"
+export EXPERIMENT_NAME="ASPL_SD15_VGGFace2_eot-1"
 export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-v1-5"
 export CLASS_DIR="data/class-person"
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
 mkdir $save_config_dir
-cp "./scripts/attack/my_attack_with_aspl.sh" $save_config_dir
+cp "./scripts/attack/my_attack_with_aspl_eot.sh" $save_config_dir
 
 # for person_id in `ls $DATASET_DIR`; do   
 for person_id in "n000050"; do   
@@ -19,8 +19,9 @@ for person_id in "n000050"; do
     mkdir -p $ADV_OUTPUT_DIR
     
     # Generate Protecting Images
-    accelerate launch attacks/aspl.py \
+    accelerate launch attacks/aspl_eot.py \
         --seed 1 \
+        --eot 1 \
         --pretrained_model_name_or_path=$MODEL_PATH  \
         --enable_xformers_memory_efficient_attention \
         --instance_data_dir_for_train=$CLEAN_TRAIN_DIR \
@@ -43,4 +44,5 @@ for person_id in "n000050"; do
         --learning_rate=5e-7 \
         --pgd_alpha=5e-3 \
         --pgd_eps=0.12549019607843137
+
 done 

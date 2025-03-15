@@ -1,11 +1,11 @@
 export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
-export EXPERIMENT_NAME="ASPL_SD15_VGGFace2_test_seed-1"
+export EXPERIMENT_NAME="ASPL_SD15_VGGFace2_fix-unet"
 export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-v1-5"
 export CLASS_DIR="data/class-person"
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
 mkdir $save_config_dir
-cp "./scripts/attack/my_attack_with_aspl.sh" $save_config_dir
+cp "./scripts/attack/my_attack_with_aspl_fix-unet.sh" $save_config_dir
 
 # for person_id in `ls $DATASET_DIR`; do   
 for person_id in "n000050"; do   
@@ -19,7 +19,7 @@ for person_id in "n000050"; do
     mkdir -p $ADV_OUTPUT_DIR
     
     # Generate Protecting Images
-    accelerate launch attacks/aspl.py \
+    accelerate launch attacks/aspl_fix-unet.py \
         --seed 1 \
         --pretrained_model_name_or_path=$MODEL_PATH  \
         --enable_xformers_memory_efficient_attention \

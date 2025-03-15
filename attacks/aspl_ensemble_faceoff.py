@@ -21,14 +21,76 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm.auto import tqdm
+import torchvision
 from transformers import AutoTokenizer, PretrainedConfig
 from utils import LatentAttack, agm
 from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
 import numpy as np
 import pdb; 
 from ip_adapter.resampler import Resampler
-
+import random
 logger = get_logger(__name__)
+
+import torchvision.transforms as transforms
+
+def get_length(length, num_block=2): # 论文里默认的就是2x2 blocks
+    rand = np.random.uniform(2, size=num_block)
+    rand_norm = np.round(rand/rand.sum()*length).astype(np.int32)
+    rand_norm[rand_norm.argmax()] += length - rand_norm.sum()
+    return tuple(rand_norm)
+
+def shuffle_single_dim(x, dim):
+    lengths = get_length(x.size(dim))
+    x_strips = list(x.split(lengths, dim=dim))
+    random.shuffle(x_strips)
+    return x_strips
+
+def image_rotation(x):
+    rotation_transform = transforms.RandomRotation(degrees=(-24, 24), interpolation=transforms.InterpolationMode.BILINEAR)
+    return  rotation_transform(x)
+
+def random_select_trans():
+    """
+    随机选择一种图像变换。
+    
+    Args:
+        无
+    
+    Returns:
+        trans: 随机选择的一种图像变换
+    
+    """
+    rot_degree = 5
+    rotater = transforms.RandomRotation(degrees=(0, rot_degree))
+    gau_kernel_size = 7
+    gau_filter = transforms.GaussianBlur(kernel_size=gau_kernel_size,)
+    hflip = transforms.RandomHorizontalFlip(p=0.5)
+    defense_transform = [
+        rotater,
+        gau_filter,
+        hflip
+    ]
+    idx = random.randint(0, len(defense_transform)-1)
+    return defense_transform[idx]
+
+def shuffle(x, mode='bsr'):
+    dims = [2,3]
+    random.shuffle(dims)
+    x_strips = shuffle_single_dim(x, dims[0])
+    if mode == 'bsr': # 打乱不同块并旋转
+        return torch.cat([torch.cat(shuffle_single_dim(image_rotation(x_strip), dim=dims[1]), dim=dims[1]) for x_strip in x_strips], dim=dims[0])
+    elif mode == 'bs': # 打乱不同块但不进行旋转
+        return torch.cat([torch.cat(shuffle_single_dim(x_strip, dim=dims[1]), dim=dims[1]) for x_strip in x_strips], dim=dims[0])
+    elif mode == 'brrt': # block shuffle random transformation 打乱不同块，并对不同块随机选取一种方式进行数据变换\
+        tran = random_select_trans()
+        return torch.cat([torch.cat(shuffle_single_dim(tran(x_strip), dim=dims[1]), dim=dims[1]) for x_strip in x_strips], dim=dims[0])
+
+def bsr_transform(x):
+    """
+    Scale the input for BSR
+    """
+    # return torch.cat([shuffle(x) for _ in range(num_scale)])
+    return shuffle(x)
 
 class DreamBoothDatasetFromTensor(Dataset):
     """Just like DreamBoothDataset, but take instance_images_tensor instead of path"""
@@ -317,6 +379,39 @@ def parse_args(input_args=None):
             "Whether to center crop the input images to the resolution. If not set, the images will be randomly"
             " cropped. The images will be resized to the resolution first before cropping."
         ),
+    )
+    parser.add_argument(
+        "--transform_hflip",
+        action="store_true",
+        help="Whether to use horizontal flip for transform.",
+    )
+    parser.add_argument(
+        "--rot_degree",
+        type=int,
+        default=5,
+        help="The degree for rotation.",
+    )
+    parser.add_argument(
+        "--bsr", 
+        action="store_true",
+        help="Whether to use rotation for transform.",
+    )
+    parser.add_argument(
+        "--transform_rot", 
+        action="store_true",
+        help="Whether to use rotation for transform.",
+        
+    )
+    parser.add_argument(
+        "--transform_gau",
+        action="store_true",
+        help="Whether to use gaussian filter for transform.",
+    )
+    parser.add_argument(
+        "--gau_kernel_size",
+        type=int,
+        default=5,
+        help="The kernel size for gaussian filter.",
     )
     parser.add_argument(
         "--train_text_encoder",
@@ -902,20 +997,6 @@ def pgd_attack(
                     else:
                         alphas = torch.ones(len(model_types)).to(device)
                     print("alpha: ", alphas)
-                    # grad_list = [grads_dict["unet"].float(), grads_dict["vae"].float(), grads_dict["ipadapter"].float()]
-                    # # 定义一个3*3 numpy矩阵，矩阵的每个元素是grd_list[i]和grad_list[j]的余弦相似度分数
-                    # cos_sim_matrix = np.zeros((3, 3))
-                    # for i in range(3):
-                    #     for j in range(3):
-                    #         cos_sim_matrix[i][j] = F.cosine_similarity(grad_list[i], grad_list[j], -1).mean()
-                    # print("cos_sim_matrix: \n", cos_sim_matrix)
-                    # alphas_grad_list = [(grads_dict["unet"] * alphas[0].cpu()).float(), (grads_dict["vae"] * alphas[1].cpu()).float(), (grads_dict["ipadapter"] * alphas[2].cpu()).float()]
-                    # alphas_cos_sim_matrix = np.zeros((3, 3))
-                    # for i in range(3):
-                    #     for j in range(3):
-                    #         alphas_cos_sim_matrix[i][j] = F.cosine_similarity(alphas_grad_list[i], alphas_grad_list[j], -1).mean()
-                    # print("alphas_cos_sim_matrix: \n", alphas_cos_sim_matrix)
-                    # loss = alphas[0] * loss_unet + alphas[1] * loss_vae + alphas[2] * loss_ipadapter
                     loss = 0.0
                     loss_sum = 0.0
                     for j, model_type in enumerate(model_types):
@@ -1143,6 +1224,7 @@ def main(args):
             image_proj_model = None
     else:
         ipadapter = None
+        image_proj_model = None
     
     resample_interpolation = transforms.InterpolationMode.BILINEAR
     center_crop = True
@@ -1154,16 +1236,35 @@ def main(args):
         trans_224 = transforms.Compose(trans_224)
         trans_512 = None
     else: # 使用eot
-        resample_interpolation = transforms.InterpolationMode.BILINEAR
-            
         train_aug_224 = [
             transforms.Resize(224, interpolation=resample_interpolation),
             transforms.CenterCrop(224) if args.center_crop else transforms.RandomCrop(224),
         ]
+        
+        rotater = transforms.RandomRotation(degrees=(0, args.rot_degree))
+        gau_filter = transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
+        defense_transform = [
+        ]
+        
+        if args.transform_hflip:
+            defense_transform = defense_transform + [transforms.RandomHorizontalFlip(p=0.5)]
+        if args.transform_rot:
+            defense_transform = defense_transform + [rotater]
+        if args.transform_gau:
+            defense_transform = [gau_filter] + defense_transform
+        
+        my_trans= [
+        ]
+
+        if args.bsr:
+            my_trans =[
+                bsr_transform
+            ] 
+            
         tensorize_and_normalize = [
             transforms.Normalize([0.5*255]*3,[0.5*255]*3),
         ]
-        trans_224 = train_aug_224 + tensorize_and_normalize
+        trans_224 = train_aug_224 + defense_transform + my_trans + tensorize_and_normalize
         trans_224 = transforms.Compose(trans_224)
         print("all_trans:{}".format(trans_224))
         
@@ -1171,11 +1272,14 @@ def main(args):
             transforms.Resize(512, interpolation=resample_interpolation),
             transforms.CenterCrop(512) if args.center_crop else transforms.RandomCrop(512),
         ]
-        trans_512 = train_aug_512 + tensorize_and_normalize
+        trans_512 = train_aug_512 + defense_transform + my_trans + tensorize_and_normalize
         trans_512 = transforms.Compose(trans_512)
         print("all_trans:{}".format(trans_512))
+        
         args.pgd_eps = 16.0
         args.pgd_alpha = 16/10 # 默认是阈值的1/10
+        # import pdb; pdb.set_trace()
+        
     target_latent_tensor = None
     if args.target_image_path is not None and args.target_image_path != "none":
         if "vae" in args.model_types or "unet" in args.model_types or "ipadaptersd" in args.model_types:
@@ -1194,7 +1298,6 @@ def main(args):
                 target_latent_tensor = (
                     vae.encode(trans_512(target_image_tensor)).latent_dist.sample().to(dtype=torch_dtype) * vae.config.scaling_factor
                 )
-            
             target_latent_tensor = target_latent_tensor.repeat(len(perturbed_data), 1, 1, 1).cuda()
         else:
             target_latent_tensor = None
@@ -1286,7 +1389,7 @@ def main(args):
     config_scripts_logs_path = "/data1/humw/Codes/My-Anti-DreamBooth/outputs/config_scripts_logs/" + exp_name
     os.makedirs(config_scripts_logs_path, exist_ok=True)
     with open(f"{config_scripts_logs_path}/{person_id}_pgd_loss_list.txt", "w") as f:
-        f.write(person_id + '\n')
+        # f.write(person_id + '\n')
         f.write(str(pgd_loss_list) + "\n")
         for index, loss_dict in enumerate(pgd_loss_list):
             f.write("index: " + str(index) + ", " + str(loss_dict) + "\n")

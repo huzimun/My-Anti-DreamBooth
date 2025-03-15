@@ -721,19 +721,20 @@ def main(args):
     f = [unet, text_encoder]
     for i in range(args.max_train_steps):
         # 1. f' = f.clone()
-        f_sur = copy.deepcopy(f)
-        f_sur = train_one_epoch(
-            args,
-            f_sur,
-            tokenizer,
-            noise_scheduler,
-            vae,
-            clean_data,
-            args.max_f_train_steps,
-        )
+        # f_sur = copy.deepcopy(f)
+        # f_sur = train_one_epoch(
+        #     args,
+        #     f_sur,
+        #     tokenizer,
+        #     noise_scheduler,
+        #     vae,
+        #     clean_data,
+        #     args.max_f_train_steps,
+        # )
         perturbed_data = pgd_attack(
             args,
-            f_sur,
+            # f_sur,
+            f,
             tokenizer,
             noise_scheduler,
             vae,
@@ -742,30 +743,16 @@ def main(args):
             target_latent_tensor,
             args.max_adv_train_steps,
         )
-        f = train_one_epoch(
-            args,
-            f,
-            tokenizer,
-            noise_scheduler,
-            vae,
-            perturbed_data,
-            args.max_f_train_steps,
-        )
+        # f = train_one_epoch(
+        #     args,
+        #     f,
+        #     tokenizer,
+        #     noise_scheduler,
+        #     vae,
+        #     perturbed_data,
+        #     args.max_f_train_steps,
+        # )
 
-        # if (i + 1) % args.checkpointing_iterations == 0:
-        #     save_folder = f"{args.output_dir}/noise-ckpt/{i+1}"
-        #     os.makedirs(save_folder, exist_ok=True)
-        #     noised_imgs = perturbed_data.detach()
-        #     img_names = [
-        #         str(instance_path).split("/")[-1]
-        #         for instance_path in list(Path(args.instance_data_dir_for_adversarial).iterdir())
-        #     ]
-        #     for img_pixel, img_name in zip(noised_imgs, img_names):
-        #         save_path = os.path.join(save_folder, f"{i+1}_noise_{img_name}")
-        #         Image.fromarray(
-        #             (img_pixel * 127.5 + 128).clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
-        #         ).save(save_path)
-        #     print(f"Saved noise at step {i+1} to {save_folder}")
     save_folder = args.output_dir
     os.makedirs(save_folder, exist_ok=True)
     noised_imgs = perturbed_data.detach()
@@ -784,10 +771,4 @@ def main(args):
 if __name__ == "__main__":
     args = parse_args()
     main(args)
-    # args = parse_args()
-    # t1 = time.time()
-    # main(args)
-    # t2 = time.time()
-    # print('TIME COST: %.6f'%(t2-t1))
-    # with open(file="time_costs.txt", mode='a') as f:
-    #     f.write(str(t2-t1) + '\n')
+    

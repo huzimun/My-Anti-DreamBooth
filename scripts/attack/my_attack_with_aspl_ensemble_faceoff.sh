@@ -30,12 +30,12 @@ else
     exit 1
 fi
 
-export model_types="unet-ipadapter" # 代理模型列表 "unet-vae-ipadapter" "unet-ipadapter" "ipadapter" "vae" "unet", "ipadaptersd"
+export model_types="unet" # 代理模型列表 "unet-vae-ipadapter" "unet-ipadapter" "ipadapter" "vae" "unet", "ipadaptersd"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${model_types}
 
 export CLASS_DIR="data/class-person"
 
-export target="yingbu"
+export target="non-target"
 if [ "$target" = "mist" ]; then
     export target_image_path="/data1/humw/Codes/mist-v2/data/MIST.png"
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${target}
@@ -50,7 +50,7 @@ else
     exit 1
 fi
 
-export agm=0 # 1使用自适应梯度变换，0不使用
+export agm=1 # 1使用自适应梯度变换，0不使用
 if [ "$agm" = 1 ]; then
     export w1=1
     export w2=1
@@ -58,9 +58,9 @@ if [ "$agm" = 1 ]; then
     export w4=1
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_agm"
 elif [ "$agm" = 0 ]; then
-    export w1=1
-    export w2=0
-    export w3=1
+    export w1=0
+    export w2=1
+    export w3=0
     export w4=0
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_no-agm-w1-"${w1}"-w2-"${w2}"-w3-"${w3}"-w4-"${w4}
 else
@@ -78,7 +78,7 @@ else
 fi
 
 # use EOT
-export eot=1 # 1使用EOT，0不使用
+export eot=0 # 1使用EOT，0不使用
 if [ "$eot" = 1 ]; then
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_eot-1"
 else
@@ -92,12 +92,13 @@ else
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_sds-0"
 fi
 
-export untargeted_unet=0 # 1使用untargeted unet，0不使用
+export untargeted_unet=1 # 1使用untargeted unet，0不使用
 if [ "$untargeted_unet" = 1 ]; then
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_unT-unet-1"
 else
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_unT-unet-0"
 fi
+d
 
 export fix_unet=0 # 1使用固定unet，0不使用
 if [ "$fix_unet" = 1 ]; then
@@ -111,6 +112,20 @@ if [ "$fix_noise" = 1 ]; then
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_fix-noise-1"
 else
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_fix-noise-0"
+fi
+
+# 数据增强
+# if gau is selected, the gauK is the kernel size of guassian filter and hflip
+# if std, just resize and center crop
+# if bsr, block shuffle and rotation
+export train_mode=std
+export gauK=7
+if [ "$train_mode" = "gau" ]; then
+    EXPERIMENT_NAME=${EXPERIMENT_NAME}"_gau-"$gauK
+elif [ "$train_mode" = "bsr" ]; then
+    EXPERIMENT_NAME=${EXPERIMENT_NAME}"_bsr"
+else
+    echo "train_mode default to be std"
 fi
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
@@ -129,7 +144,7 @@ for person_id in "n000050"; do
     mkdir -p $ADV_OUTPUT_DIR
     
     # Generate Protecting Images
-    accelerate launch attacks/aspl_ensemble_faceoff.py \
+    command="""accelerate launch attacks/aspl_ensemble_faceoff.py \
         --seed=1 \
         --fix_noise $fix_noise \
         --fix_unet $fix_unet \
@@ -149,10 +164,10 @@ for person_id in "n000050"; do
         --enable_xformers_memory_efficient_attention \
         --instance_data_dir_for_train=$CLEAN_TRAIN_DIR \
         --instance_data_dir_for_adversarial=$CLEAN_ADV_DIR \
-        --instance_prompt="a photo of sks person" \
+        --instance_prompt='a photo of sks person' \
         --class_data_dir=$CLASS_DIR \
         --num_class_images=200 \
-        --class_prompt="a photo of person" \
+        --class_prompt='a photo of person' \
         --output_dir=$ADV_OUTPUT_DIR \
         --center_crop \
         --with_prior_preservation \
@@ -166,6 +181,17 @@ for person_id in "n000050"; do
         --checkpointing_iterations=10 \
         --learning_rate=5e-7 \
         --pgd_alpha=5e-3 \
-        --pgd_eps=0.12549019607843137
+        --pgd_eps=0.12549019607843137"""
+    
+    if [ "$train_mode" = "gau" ]; then
+        command="$command --transform_gau --gau_kernel_size $gauK --transform_hflip "
+    elif [ "$train_mode" = "bsr" ]; then
+        command="$command --bsr"
+    else
+        echo "train_mode default to be std"
+    fi
+
+    echo $command
+    eval $command
         
 done 

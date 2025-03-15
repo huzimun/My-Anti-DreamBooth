@@ -290,7 +290,7 @@ def agm(args, ori_data, cur_adv, grads_dict, targets_dict, beta, models_dict, ti
                 del ipadapter_perturbed_tensor
             else:
                 raise Exception('Wrong model index')
-            w[j] += loss / loss_self_dict[model_type_i] * beta # 模型i的对抗样本扰动模型j的损失
+            w[j] += loss / loss_self_dict[model_type_i] * beta # 模型j的对抗样本扰动模型i的损失
     w = torch.softmax(w, dim=0) # 根据模拟的下一步损失确定当前的梯度权重
     # pdb.set_trace()
     del ori_data
