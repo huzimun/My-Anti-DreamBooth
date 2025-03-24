@@ -1,17 +1,30 @@
-export EXPERIMENT_NAME="MetaCloak_SD15"
+export EXPERIMENT_NAME="IDProtector_conda-photomaker_VGGFace2_ipadapter-photomaker_cosine_eot-0_non-target_agm-0_norm-0"
 export DATASET_DIR="./outputs/adversarial_images/"$EXPERIMENT_NAME
-export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-2-1-base"
+
+export BASE_MODEL="SD15"
+EXPERIMENT_NAME=$EXPERIMENT_NAME"_"$BASE_MODEL
+if [ "$BASE_MODEL" = "SD15" ]; then
+  export MODEL_PATH="./stable-diffusion/stable-diffusion-v1-5"
+elif [ "$BASE_MODEL" = "SD14" ]; then
+  export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-v1-4"
+elif [ "$BASE_MODEL" = "SD21" ]; then
+  export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-2-1-base"
+else
+  echo "Base model not supported"
+  exit 1
+fi
+
 export CLASS_DIR="data/class-person"
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
 mkdir $save_config_dir
-cp "./scripts/attack/offline_test_SD21.sh" $save_config_dir
+cp "./scripts/gen/my_train_dreambooth_2.sh" $save_config_dir
 
 for person_id in `ls $DATASET_DIR`
 do       
     # ------------------------- Train DreamBooth on perturbed examples -------------------------
     export INSTANCE_DIR=${DATASET_DIR}"/"${person_id}
-    export DREAMBOOTH_OUTPUT_DIR="outputs/customization_outputs/DreamBooth-SD21_"$EXPERIMENT_NAME"/"${person_id}
+    export DREAMBOOTH_OUTPUT_DIR="outputs/customization_outputs/"$EXPERIMENT_NAME"/"${person_id}
     echo ${INSTANCE_DIR}
     echo ${DREAMBOOTH_OUTPUT_DIR}
     
@@ -42,22 +55,35 @@ do
       --prior_generation_precision=bf16 \
       --sample_batch_size=8
 
-done 
+done
 
-export EXPERIMENT_NAME="sds_eps16_steps100_gmode+"
+export EXPERIMENT_NAME="IDProtector_conda-photomaker_CelebA-HQ_ipadapter-photomaker_cosine_eot-0_non-target_agm-0_norm-0"
 export DATASET_DIR="./outputs/adversarial_images/"$EXPERIMENT_NAME
-export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-2-1-base"
+
+export BASE_MODEL="SD15"
+EXPERIMENT_NAME=$EXPERIMENT_NAME"_"$BASE_MODEL
+if [ "$BASE_MODEL" = "SD15" ]; then
+  export MODEL_PATH="./stable-diffusion/stable-diffusion-v1-5"
+elif [ "$BASE_MODEL" = "SD14" ]; then
+  export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-v1-4"
+elif [ "$BASE_MODEL" = "SD21" ]; then
+  export MODEL_PATH="/data1/humw/Pretrains/stable-diffusion-2-1-base"
+else
+  echo "Base model not supported"
+  exit 1
+fi
+
 export CLASS_DIR="data/class-person"
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
 mkdir $save_config_dir
-cp "./scripts/attack/offline_test_SD21.sh" $save_config_dir
+cp "./scripts/gen/my_train_dreambooth_2.sh" $save_config_dir
 
 for person_id in `ls $DATASET_DIR`
 do       
     # ------------------------- Train DreamBooth on perturbed examples -------------------------
     export INSTANCE_DIR=${DATASET_DIR}"/"${person_id}
-    export DREAMBOOTH_OUTPUT_DIR="outputs/customization_outputs/DreamBooth-SD21_"$EXPERIMENT_NAME"/"${person_id}
+    export DREAMBOOTH_OUTPUT_DIR="outputs/customization_outputs/"$EXPERIMENT_NAME"/"${person_id}
     echo ${INSTANCE_DIR}
     echo ${DREAMBOOTH_OUTPUT_DIR}
     
@@ -88,4 +114,4 @@ do
       --prior_generation_precision=bf16 \
       --sample_batch_size=8
 
-done 
+done

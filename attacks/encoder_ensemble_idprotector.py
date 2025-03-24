@@ -2,7 +2,6 @@ import argparse
 import copy
 import hashlib
 import itertools
-import json
 import logging
 import os
 from pathlib import Path
@@ -250,10 +249,10 @@ class DreamBoothDatasetFromTensor(Dataset):
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
-        "--id_map_path", 
+        "--mode", 
         type=str, 
-        default="test", 
-        help="id_map_path")
+        default="idprotector", 
+        help="idprotector use projection image embeds for ip-adapter")
     parser.add_argument(
         "--norm", 
         type=int, 
@@ -429,30 +428,19 @@ def load_data(args, data_dir="", size=512, center_crop=True) -> torch.Tensor:
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
-        
-        if Path(data_dir).is_file():  # 检查data_dir是否为单个文件
-            # 加载单个图像并重复4次
-            image = Image.open(data_dir).convert("RGB")
-            images = [image_transforms(image) for _ in range(4)]
-        else:  # data_dir是目录
-            images = [image_transforms(Image.open(i).convert("RGB")) for i in list(Path(data_dir).iterdir())]
 
+        images = [image_transforms(Image.open(i).convert("RGB")) for i in list(Path(data_dir).iterdir())]
         images = torch.stack(images)
     else: # 使用eot，这里加载数据的时候就不进行数据变换
         def image_to_numpy(image):
             return np.array(image).astype(np.uint8)
         # more robust loading to avoid loaing non-image files
         images = [] 
-        if Path(data_dir).is_file():  # 检查data_dir是否为单个文件
-            # 加载单个图像并重复4次
-            image = Image.open(data_dir).convert("RGB")
-            images.extend([image_to_numpy(image) for _ in range(4)])
-        else:  # data_dir是目录
-            for i in list(Path(data_dir).iterdir()):
-                if not i.suffix in [".jpg", ".png", ".jpeg"]:
-                    continue
-                else:
-                    images.append(image_to_numpy(Image.open(i).convert("RGB")))
+        for i in list(Path(data_dir).iterdir()):
+            if not i.suffix in [".jpg", ".png", ".jpeg"]:
+                continue
+            else:
+                images.append(image_to_numpy(Image.open(i).convert("RGB")))
         images = [Image.fromarray(i).resize((size, size), 2) for i in images]
         images = np.stack(images)
         # from B x H x W x C to B x C x H x W
@@ -654,6 +642,7 @@ def pgd_attack(
     trans_224,
     trans_336,
     trans_512,
+    image_proj_model,
 ):
     """Return new perturbed data"""
     device = torch.device(args.device)
@@ -687,9 +676,15 @@ def pgd_attack(
         elif "ipadapter" == model_type:
             tran_original_data_224 = trans_224(original_images).to(dtype=torch_dtype)
             original_image_embeds = model_dict[model_type](tran_original_data_224, output_hidden_states=True).hidden_states[-2]
+            if image_proj_model is not None:
+                proj_original_image_embeds = image_proj_model(original_image_embeds)
+                original_image_embeds = proj_original_image_embeds
             if args.target != "non-target":
                 tran_target_data_224 = trans_224(target_images).to(dtype=torch_dtype)
                 target_image_embeds = model_dict[model_type](tran_target_data_224, output_hidden_states=True).hidden_states[-2]
+                if image_proj_model is not None:
+                    proj_target_image_embeds = image_proj_model(target_image_embeds)
+                    target_image_embeds = proj_target_image_embeds
         elif "photomaker" == model_type:
             tran_original_data_224 = trans_224(original_images).to(dtype=torch_dtype)
             original_image_embeds = model_dict[model_type](tran_original_data_224)
@@ -737,6 +732,9 @@ def pgd_attack(
             elif "ipadapter" == model_type:
                 tran_perturbed_data_224 = trans_224(perturbed_images).to(dtype=torch_dtype)
                 perturbed_image_embeds = model_dict[model_type](tran_perturbed_data_224, output_hidden_states=True).hidden_states[-2]
+                if image_proj_model is not None:
+                    proj_perturbed_image_embeds = image_proj_model(perturbed_image_embeds)
+                    perturbed_image_embeds = proj_perturbed_image_embeds
             elif "photomaker" == model_type:
                 tran_perturbed_data_224 = trans_224(perturbed_images).to(dtype=torch_dtype)
                 perturbed_image_embeds = model_dict[model_type](tran_perturbed_data_224)
@@ -789,11 +787,6 @@ def pgd_attack(
                 sum_loss += loss_dict[model_type]
         elif args.agm == 2:
             alphas = [10, 1, 1]
-            for tmp_idx, model_type in enumerate(model_types):
-                sum_loss += alphas[tmp_idx] * loss_dict[model_type]
-            weighted_loss = sum_loss
-        elif args.agm == 3:
-            alphas = [5, 1, 1]
             for tmp_idx, model_type in enumerate(model_types):
                 sum_loss += alphas[tmp_idx] * loss_dict[model_type]
             weighted_loss = sum_loss
@@ -861,6 +854,24 @@ def main(args):
         elif model_type == "ipadapter":
             ipadapter_path = "/data1/humw/Pretrains/IP-Adapter/models/image_encoder"
             model = CLIPVisionModelWithProjection.from_pretrained(ipadapter_path).to(dtype=torch_dtype).eval().requires_grad_(False)
+            if args.mode == "idprotector":
+                # 映射层参数参考IPAdapterPlusXL中的默认配置
+                image_proj_model = Resampler(
+                    dim=1280,
+                    depth=4,
+                    dim_head=64,
+                    heads=20,
+                    num_queries= 16, # self.num_tokens,
+                    embedding_dim= 1280, # self.image_encoder.config.hidden_size,
+                    output_dim=2048,#self.pipe.unet.config.cross_attention_dim,
+                    ff_mult=4,
+                ).to(dtype=torch_dtype)
+                # 加载投影层参数
+                state_dict = torch.load("/data1/humw/Pretrains/IP-Adapter/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.bin", map_location="cpu")
+                image_proj_model.load_state_dict(state_dict["image_proj"])
+                image_proj_model = image_proj_model.to(args.device, dtype=torch_dtype).eval().requires_grad_(False)
+            else:
+                image_proj_model = None
         elif model_type == "photomaker":
             model = PhotoMakerIDEncoder()
             state_dict = torch.load("/data1/humw/Pretrains/photomaker-v1.bin", map_location="cpu")
@@ -885,20 +896,9 @@ def main(args):
     if args.target == "non-target":
         target_data = None
     else:
-        if (args.target == "max-mask") or (args.target == "min-mask") or (args.target == "random-mask"):
-            # 首先获取person id
-            person_id = args.output_dir.split('/')[-1]
-            # 然后获取target id
-            # 根据id_map_path读取json文件
-            with open(args.id_map_path, 'r') as f:
-                id_map = json.load(f)
-            target_id = id_map[person_id]
-            target_image_path = os.path.join(args.target_image_path, target_id)
-        else:
-            target_image_path = args.target_image_path
         target_data = load_data(
             args,
-            data_dir=target_image_path,
+            data_dir=args.target_image_path,
             size=args.resolution,
             center_crop=args.center_crop,
         )
@@ -970,6 +970,7 @@ def main(args):
             trans_224=trans_224,
             trans_336=trans_336,
             trans_512=trans_512,
+            image_proj_model=image_proj_model,
         )
         pgd_loss_list.extend(tmp_pgd_loss_list)
 

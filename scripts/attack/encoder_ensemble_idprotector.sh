@@ -1,7 +1,9 @@
-export EXPERIMENT_NAME="Encoder_attack_conda-photomaker"
-export device="cuda:0"
+export EXPERIMENT_NAME="IDProtector_conda-photomaker"
+export device="cuda:2"
 
-export DATASET="CelebA-HQ"
+export mode="idprotector"
+
+export DATASET="VGGFace2"
 if [ "$DATASET" = "VGGFace2" ]; then
     export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${DATASET}
@@ -13,12 +15,12 @@ else
     exit 1
 fi
 # "vae14-vae15-vae21-ipadapter-photomaker-pulid"
-export model_types="vae15-ipadapter-photomaker"
+export model_types="ipadapter-photomaker"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${model_types}
 
 # distance choice for adv attack loss
-export distance_choice="mix" # mse or cosine, mix use mse for vae, and cosine for ipadapter and photomaker
-if [ "$distance_choice" = "mse" ] || [ "$distance_choice" = "cosine" ] || [ "$distance_choice" = "mix" ]; then
+export distance_choice="cosine" # mse or cosine
+if [ "$distance_choice" = "mse" ] || [ "$distance_choice" = "cosine" ]; then
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${distance_choice}
 else
     echo "Invalid distance_choice"
@@ -33,43 +35,12 @@ else
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_eot-0"
 fi
 
-export target="min-mask" # "yingbu" "mist" "max-mask" "min-mask" "random-mask"
-export id_map_path="test" # map original id to target id
+export target="non-target" # "yingbu" "mist"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${target}
 if [ "$target" = "mist" ]; then
     export target_image_path="/data1/humw/Codes/FaceOff/target_images/mist"
 elif [ "$target" = "yingbu" ]; then
     export target_image_path="/data1/humw/Codes/FaceOff/target_images/yingbu"
-elif [ "$target" = "max-mask" ] || [ "$target" = "min-mask" ] || [ "$target" = "random-mask" ]; then
-    export target_image_path="/data1/humw/Codes/My-Anti-DreamBooth/target_images"
-    if [ "$target" = "max-mask" ]; then
-        if [ "$DATASET" = "CelebA-HQ" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/max_vae_mse_CelebA-HQ-mask.json"
-        elif [ "$DATASET" = "VGGFace2" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/max_vae_mse_VGGFace2-mask.json"
-        else
-            export "invalid DATASET"
-            exit 1
-        fi
-    elif [ "$target" = "min-mask" ]; then
-        if [ "$DATASET" = "CelebA-HQ" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/min_vae_mse_CelebA-HQ-mask.json"
-        elif [ "$DATASET" = "VGGFace2" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/min_vae_mse_VGGFace2-mask.json"
-        else
-            export "invalid DATASET"
-            exit 1
-        fi
-    elif [ "$target" = "random-mask" ]; then
-        if [ "$DATASET" = "CelebA-HQ" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/random_vae_mse_CelebA-HQ-mask.json"
-        elif [ "$DATASET" = "VGGFace2" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/random_vae_mse_VGGFace2-mask.json"
-        else
-            export "invalid DATASET"
-            exit 1
-        fi
-    fi
 elif [ "$target" = "non-target" ]; then
     export target_image_path="non-target"
 else
@@ -100,7 +71,7 @@ fi
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
 mkdir $save_config_dir
-cp "./scripts/attack/encoder_ensemble_faceoff.sh" $save_config_dir
+cp "./scripts/attack/encoder_ensemble_idprotector.sh" $save_config_dir
 
 for person_id in `ls $DATASET_DIR`; do   
 # for person_id in "n000050" n000057; do   
@@ -112,8 +83,8 @@ for person_id in `ls $DATASET_DIR`; do
     mkdir -p $ADV_OUTPUT_DIR
     
     # Generate Protecting Images
-    python3 attacks/encoder_ensemble_faceoff.py \
-        --id_map_path $id_map_path \
+    python3 attacks/encoder_ensemble_idprotector.py \
+        --mode=$mode \
         --norm $norm \
         --agm $agm \
         --model_types $model_types \
@@ -137,9 +108,10 @@ for person_id in `ls $DATASET_DIR`; do
         
 done 
 
+export EXPERIMENT_NAME="IDProtector_conda-photomaker"
+export device="cuda:2"
 
-export EXPERIMENT_NAME="Encoder_attack_conda-photomaker"
-export device="cuda:0"
+export mode="idprotector"
 
 export DATASET="CelebA-HQ"
 if [ "$DATASET" = "VGGFace2" ]; then
@@ -153,12 +125,12 @@ else
     exit 1
 fi
 # "vae14-vae15-vae21-ipadapter-photomaker-pulid"
-export model_types="vae15-ipadapter-photomaker"
+export model_types="ipadapter-photomaker"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${model_types}
 
 # distance choice for adv attack loss
-export distance_choice="mix" # mse or cosine, mix use mse for vae, and cosine for ipadapter and photomaker
-if [ "$distance_choice" = "mse" ] || [ "$distance_choice" = "cosine" ] || [ "$distance_choice" = "mix" ]; then
+export distance_choice="cosine" # mse or cosine
+if [ "$distance_choice" = "mse" ] || [ "$distance_choice" = "cosine" ]; then
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${distance_choice}
 else
     echo "Invalid distance_choice"
@@ -173,43 +145,12 @@ else
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_eot-0"
 fi
 
-export target="random-mask" # "yingbu" "mist" "max-mask" "min-mask" "random-mask"
-export id_map_path="test" # map original id to target id
+export target="non-target" # "yingbu" "mist"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${target}
 if [ "$target" = "mist" ]; then
     export target_image_path="/data1/humw/Codes/FaceOff/target_images/mist"
 elif [ "$target" = "yingbu" ]; then
     export target_image_path="/data1/humw/Codes/FaceOff/target_images/yingbu"
-elif [ "$target" = "max-mask" ] || [ "$target" = "min-mask" ] || [ "$target" = "random-mask" ]; then
-    export target_image_path="/data1/humw/Codes/My-Anti-DreamBooth/target_images"
-    if [ "$target" = "max-mask" ]; then
-        if [ "$DATASET" = "CelebA-HQ" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/max_vae_mse_CelebA-HQ-mask.json"
-        elif [ "$DATASET" = "VGGFace2" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/max_vae_mse_VGGFace2-mask.json"
-        else
-            export "invalid DATASET"
-            exit 1
-        fi
-    elif [ "$target" = "min-mask" ]; then
-        if [ "$DATASET" = "CelebA-HQ" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/min_vae_mse_CelebA-HQ-mask.json"
-        elif [ "$DATASET" = "VGGFace2" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/min_vae_mse_VGGFace2-mask.json"
-        else
-            export "invalid DATASET"
-            exit 1
-        fi
-    elif [ "$target" = "random-mask" ]; then
-        if [ "$DATASET" = "CelebA-HQ" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/random_vae_mse_CelebA-HQ-mask.json"
-        elif [ "$DATASET" = "VGGFace2" ]; then
-            export id_map_path="/data1/humw/Codes/My-Anti-DreamBooth/random_vae_mse_VGGFace2-mask.json"
-        else
-            export "invalid DATASET"
-            exit 1
-        fi
-    fi
 elif [ "$target" = "non-target" ]; then
     export target_image_path="non-target"
 else
@@ -240,7 +181,7 @@ fi
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
 mkdir $save_config_dir
-cp "./scripts/attack/encoder_ensemble_faceoff.sh" $save_config_dir
+cp "./scripts/attack/encoder_ensemble_idprotector.sh" $save_config_dir
 
 for person_id in `ls $DATASET_DIR`; do   
 # for person_id in "n000050" n000057; do   
@@ -252,8 +193,8 @@ for person_id in `ls $DATASET_DIR`; do
     mkdir -p $ADV_OUTPUT_DIR
     
     # Generate Protecting Images
-    python3 attacks/encoder_ensemble_faceoff.py \
-        --id_map_path $id_map_path \
+    python3 attacks/encoder_ensemble_idprotector.py \
+        --mode=$mode \
         --norm $norm \
         --agm $agm \
         --model_types $model_types \
