@@ -1,9 +1,9 @@
 export EXPERIMENT_NAME="IDProtector_conda-photomaker"
-export device="cuda:1"
+export device="cuda:0"
 
 export mode="idprotector"
 
-export DATASET="new-CelebA-HQ"
+export DATASET="VGGFace2"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${DATASET}
 if [ "$DATASET" = "VGGFace2" ]; then
     export DATASET_DIR="/data1/humw/Datasets/VGGFace2"
@@ -16,7 +16,7 @@ else
     exit 1
 fi
 # "vae14-vae15-vae21-ipadapter-photomaker-pulid"
-export model_types="ipadapter-photomaker"
+export model_types="vae15-ipadapter-photomaker"
 EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${model_types}
 
 # distance choice for adv attack loss
@@ -50,7 +50,7 @@ else
 fi
 
 # use AGM
-export agm=0 # 1使用AGM，0取平均，2手动调整
+export agm=2 # 1使用AGM，0取平均，2手动调整
 if [ "$agm" = 1 ]; then
     EXPERIMENT_NAME=${EXPERIMENT_NAME}"_agm-1"
 elif [ "$agm" = 0 ]; then
@@ -72,7 +72,7 @@ fi
 
 export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
 mkdir $save_config_dir
-cp "./scripts/attack/encoder_ensemble_idprotector.sh" $save_config_dir
+cp "./scripts/attack/my_encoder_ensemble_idprotector.sh" $save_config_dir
 
 for person_id in `ls $DATASET_DIR`; do   
 # for person_id in "n000050" n000057; do   

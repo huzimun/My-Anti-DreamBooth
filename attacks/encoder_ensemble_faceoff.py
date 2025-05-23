@@ -797,6 +797,11 @@ def pgd_attack(
             for tmp_idx, model_type in enumerate(model_types):
                 sum_loss += alphas[tmp_idx] * loss_dict[model_type]
             weighted_loss = sum_loss
+        elif args.agm == 4:
+            alphas = [10, 1, 2]
+            for tmp_idx, model_type in enumerate(model_types):
+                sum_loss += alphas[tmp_idx] * loss_dict[model_type]
+            weighted_loss = sum_loss
         else: # 取平均
             for tmp_idx, model_type in enumerate(model_types):
                 sum_loss += loss_dict[model_type]
@@ -894,6 +899,15 @@ def main(args):
                 id_map = json.load(f)
             target_id = id_map[person_id]
             target_image_path = os.path.join(args.target_image_path, target_id)
+        if args.target == "face":
+            # 首先获取person id
+            person_id = args.output_dir.split('/')[-1]
+            # 然后获取target id
+            # 根据id_map_path读取json文件
+            with open(args.id_map_path, 'r') as f:
+                id_map = json.load(f)
+            target_id = id_map[person_id]
+            target_image_path = os.path.join(args.target_image_path, target_id, "set_B")
         else:
             target_image_path = args.target_image_path
         target_data = load_data(
