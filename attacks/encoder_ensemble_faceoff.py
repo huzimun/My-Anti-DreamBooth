@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
-
+import time
 import datasets
 import diffusers
 import torch
@@ -797,8 +797,28 @@ def pgd_attack(
             for tmp_idx, model_type in enumerate(model_types):
                 sum_loss += alphas[tmp_idx] * loss_dict[model_type]
             weighted_loss = sum_loss
-        elif args.agm == 4:
-            alphas = [10, 1, 2]
+        elif args.agm == 10011:
+            alphas = [100, 1, 1]
+            for tmp_idx, model_type in enumerate(model_types):
+                sum_loss += alphas[tmp_idx] * loss_dict[model_type]
+            weighted_loss = sum_loss
+        elif args.agm == 111:
+            alphas = [1, 1, 1]
+            for tmp_idx, model_type in enumerate(model_types):
+                sum_loss += alphas[tmp_idx] * loss_dict[model_type]
+            weighted_loss = sum_loss
+        elif args.agm == 444:
+            alphas = [4, 4, 4]
+            for tmp_idx, model_type in enumerate(model_types):
+                sum_loss += alphas[tmp_idx] * loss_dict[model_type]
+            weighted_loss = sum_loss
+        elif args.agm == 633:
+            alphas = [6, 3, 3]
+            for tmp_idx, model_type in enumerate(model_types):
+                sum_loss += alphas[tmp_idx] * loss_dict[model_type]
+            weighted_loss = sum_loss
+        elif args.agm == 822:
+            alphas = [8, 2, 2]
             for tmp_idx, model_type in enumerate(model_types):
                 sum_loss += alphas[tmp_idx] * loss_dict[model_type]
             weighted_loss = sum_loss
@@ -939,9 +959,12 @@ def main(args):
         ]
         trans_512 = transforms.Compose(trans_512)
     else: # 使用eot
+        gau_kernel_size = 7
+        gau_filter = transforms.GaussianBlur(kernel_size=gau_kernel_size,)
         train_aug_224 = [
             transforms.Resize(224, interpolation=resample_interpolation),
             transforms.CenterCrop(224) if args.center_crop else transforms.RandomCrop(224),
+            gau_filter
         ]
 
         tensorize_and_normalize = [
@@ -954,6 +977,7 @@ def main(args):
         train_aug_336 = [
             transforms.Resize(336, interpolation=resample_interpolation),
             transforms.CenterCrop(336) if args.center_crop else transforms.RandomCrop(336),
+            gau_filter
         ]
 
         trans_336 = train_aug_336 + tensorize_and_normalize
@@ -963,13 +987,15 @@ def main(args):
         train_aug_512 = [
             transforms.Resize(512, interpolation=resample_interpolation),
             transforms.CenterCrop(512) if args.center_crop else transforms.RandomCrop(512),
+            gau_filter
         ]
         trans_512 = train_aug_512 + tensorize_and_normalize
         trans_512 = transforms.Compose(trans_512)
         print("all_trans:{}".format(trans_512))
         
         args.pgd_eps = 16.0
-        args.pgd_alpha = 16/10 # 默认是阈值的1/10
+        # args.pgd_alpha = 16/10 # 默认是阈值的1/10
+        args.pgd_alpha = args.pgd_alpha * 255 # [0, 1] * 255
         
     pgd_loss_list = []
     for i in range(args.max_train_steps):
@@ -1018,4 +1044,10 @@ def main(args):
 if __name__ == "__main__":
     args = parse_args()
     main(args)
-    
+    # args = parse_args()
+    # t1 = time.time()
+    # main(args)
+    # t2 = time.time()
+    # print('TIME COST: %.6f'%(t2-t1))
+    # with open(file="time_costs.txt", mode='a') as f:
+    #     f.write(str(t2-t1) + '\n')

@@ -1,0 +1,4 @@
+- 不同文件说明
+    - encoder_ensemble_faceoff.py TED实现版本
+    - encoder_ensemble_faceoff_with_agu-eot.py 在TED基础上修改了EOT部分代码，使用EOT的同时进行高斯平滑
+    - encoder_ensemble_idprotector.py IDProtector*复现版本，没有加入IDProtector中的仿射变换和回归损失，额外集成了tuning-based模型的图像编码器VAE
