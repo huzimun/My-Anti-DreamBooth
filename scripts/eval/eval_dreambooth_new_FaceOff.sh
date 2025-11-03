@@ -1,6 +1,6 @@
-export adversarial_folder_name="TED_agu-eot_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-1_yingbu_agm-2_norm-0_SD15"
+export adversarial_folder_name="LORA_SD15_Encoder_attack_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-0_yingbu_agm-2_norm-0_jpeg75"
 echo $adversarial_folder_name
-export device="cuda:2"
+export device="cuda:3"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
@@ -83,9 +83,9 @@ python3 ./evaluations/ism_fdfr.py \
 #     --device $device
 
 
-export adversarial_folder_name="TED_agu-eot_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-1_yingbu_agm-2_norm-0_grdipure_SD15"
+export adversarial_folder_name="LORA_SD15_Encoder_attack_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-0_yingbu_agm-2_norm-0_jpeg50"
 echo $adversarial_folder_name
-export device="cuda:2"
+export device="cuda:3"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
@@ -167,9 +167,9 @@ python3 ./evaluations/ism_fdfr.py \
 #     --scene2 "original_input" \
 #     --device $device
 
-export adversarial_folder_name="TED_agu-eot_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-1_yingbu_agm-2_norm-0-gaussian-noise0.1_sr_SD15"
+export adversarial_folder_name="LORA_SD15_Encoder_attack_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-0_yingbu_agm-2_norm-0_jpeg25"
 echo $adversarial_folder_name
-export device="cuda:2"
+export device="cuda:3"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
